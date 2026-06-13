@@ -53,6 +53,11 @@ interface SkillRadarProps {
 export default function SkillRadar({ player }: SkillRadarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
 
+  const maxSubStatValue = useMemo(() => {
+    const all = ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats.map(ss => ss.value))
+    return Math.max(1, ...all)
+  }, [player.stats])
+
   const vertices = useMemo<Vertex[]>(() => {
     const result: Vertex[] = []
     ALL_STAT_KEYS.forEach((stat, sectorIdx) => {
@@ -69,7 +74,7 @@ export default function SkillRadar({ player }: SkillRadarProps) {
         } else {
           angle = sectorStart + (j / (subStats.length - 1)) * sectorSpan
         }
-        const r = (ss.value / 100) * MAX_R
+        const r = (ss.value / maxSubStatValue) * MAX_R
         const pos = polar(angle, r)
         const outerPos = polar(angle, MAX_R)
         result.push({
@@ -86,14 +91,14 @@ export default function SkillRadar({ player }: SkillRadarProps) {
       })
     })
     return result
-  }, [player.stats])
+  }, [player.stats, maxSubStatValue])
 
   const polygonPoints = vertices.map(v => `${v.x},${v.y}`).join(' ')
   const polygonPath = vertices.length > 2
     ? `M ${vertices.map(v => `${v.x},${v.y}`).join(' L ')} Z`
     : ''
 
-  const gridLevels = [20, 40, 60, 80, 100]
+  const gridLevels = [20, 40, 60, 80, 100] // percentages of maxSubStatValue
 
   const hasSubStats = vertices.length > 0
 
@@ -293,7 +298,7 @@ export default function SkillRadar({ player }: SkillRadarProps) {
                 fontFamily="Orbitron, monospace"
                 fill="#93c5fd"
               >
-                {v.value} / 100
+                {v.value}
               </text>
             </g>
           )

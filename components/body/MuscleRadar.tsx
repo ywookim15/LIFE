@@ -12,13 +12,7 @@ function calc1RM(weight: number, reps: number): number {
   return weight * (1 + reps / 30)
 }
 
-// "Elite" benchmark 1RM (lbs) per muscle group for 100% score
-const BENCHMARK: Record<MuscleGroup, number> = {
-  chest: 225, back: 315, shoulders: 155, biceps: 110, triceps: 185,
-  forearms: 80,  abs: 140, quads: 315, hamstrings: 245, calves: 250,
-}
-
-function getScore(muscle: MuscleGroup, logs: WorkoutLog[]): number {
+function getBest1RM(muscle: MuscleGroup, logs: WorkoutLog[]): number {
   let best = 0
   for (const log of logs) {
     for (const ex of log.exercises) {
@@ -30,7 +24,7 @@ function getScore(muscle: MuscleGroup, logs: WorkoutLog[]): number {
       }
     }
   }
-  return Math.min(100, Math.round((best / BENCHMARK[muscle]) * 100))
+  return Math.round(best)
 }
 
 const MUSCLE_LABEL: Record<MuscleGroup, string> = {
@@ -42,11 +36,9 @@ const MUSCLE_LABEL: Record<MuscleGroup, string> = {
 interface Props { workoutLogs: WorkoutLog[] }
 
 export default function MuscleRadar({ workoutLogs }: Props) {
-  const data = ALL_MUSCLES.map(m => ({
-    muscle: MUSCLE_LABEL[m],
-    score: getScore(m, workoutLogs),
-    fullMark: 100,
-  }))
+  const raw = ALL_MUSCLES.map(m => ({ muscle: MUSCLE_LABEL[m], value: getBest1RM(m, workoutLogs) }))
+  const maxVal = Math.max(1, ...raw.map(r => r.value))
+  const data = raw.map(r => ({ muscle: r.muscle, score: r.value, fullMark: maxVal }))
 
   return (
     <div className="w-full" style={{ height: 260 }}>
@@ -74,7 +66,7 @@ export default function MuscleRadar({ workoutLogs }: Props) {
               fontSize: 10,
               color: '#93c5fd',
             }}
-            formatter={(val) => [`${val ?? 0}%`, 'Strength']}
+            formatter={(val) => [`${val ?? 0} lbs (est. 1RM)`, 'Strength']}
           />
         </RadarChart>
       </ResponsiveContainer>

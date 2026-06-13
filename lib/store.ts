@@ -89,8 +89,16 @@ export const useGameStore = create<GameStore>()(
           set({ _hasHydrated: true })
           return
         }
+        // Always derive stat.value from sum of sub-stats (migration + consistency)
+        const player = d.player ?? null
+        if (player) {
+          for (const stat of ALL_STAT_KEYS) {
+            const subs = player.stats[stat]?.subStats ?? []
+            player.stats[stat] = { ...player.stats[stat], value: subs.reduce((sum: number, ss: { value: number }) => sum + ss.value, 0) }
+          }
+        }
         set({
-          player: d.player ?? null,
+          player,
           quests: d.quests ?? [],
           logs: d.logs ?? [],
           achievements: d.achievements ?? DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
@@ -152,32 +160,31 @@ export const useGameStore = create<GameStore>()(
           leveledUp = true
           if (newLevel > 100) {
             const next = getNextTier(newTier)
-            if (next) { newTier = next; tieredUp = true }
-            else { newLevel = 100 }
+            if (next) { newTier = next; tieredUp = true; newLevel = 1 }
+            // at X tier: no cap, levels continue indefinitely
           }
         }
 
         const newStats = { ...player.stats }
         for (const { stat, xp } of breakdown) {
           if (!newStats[stat]) continue
-          const inc = Math.floor(xp / 10)
-          newStats[stat] = {
-            ...newStats[stat],
-            value: Math.min(999, newStats[stat].value + inc),
+          const incTotal = Math.floor(xp / 10)
+          const subs = newStats[stat].subStats
+          if (subs.length > 0 && incTotal > 0) {
+            const incPerSub = Math.max(1, Math.floor(incTotal / subs.length))
+            const updated = subs.map(ss => ({ ...ss, value: ss.value + incPerSub }))
+            newStats[stat] = { subStats: updated, value: updated.reduce((s, ss) => s + ss.value, 0) }
           }
         }
 
         if (subStatUpdates) {
           for (const { id, increase } of subStatUpdates) {
             for (const stat of ALL_STAT_KEYS) {
-              const ss = newStats[stat].subStats.find(s => s.id === id)
-              if (ss) {
-                newStats[stat] = {
-                  ...newStats[stat],
-                  subStats: newStats[stat].subStats.map(s =>
-                    s.id === id ? { ...s, value: Math.min(100, s.value + increase) } : s
-                  ),
-                }
+              if (newStats[stat].subStats.some(s => s.id === id)) {
+                const updated = newStats[stat].subStats.map(s =>
+                  s.id === id ? { ...s, value: s.value + increase } : s
+                )
+                newStats[stat] = { subStats: updated, value: updated.reduce((s, ss) => s + ss.value, 0) }
               }
             }
           }
@@ -350,23 +357,19 @@ export const useGameStore = create<GameStore>()(
 
       addSubStat: (parentStat, name, description = '') => {
         const id = generateId()
-        set(s => ({
-          player: s.player
-            ? {
-                ...s.player,
-                stats: {
-                  ...s.player.stats,
-                  [parentStat]: {
-                    ...s.player.stats[parentStat],
-                    subStats: [
-                      ...s.player.stats[parentStat].subStats,
-                      { id, name, description, value: 1, parentStat },
-                    ],
-                  },
-                },
-              }
-            : null,
-        }))
+        set(s => {
+          if (!s.player) return {}
+          const updated = [...s.player.stats[parentStat].subStats, { id, name, description, value: 1, parentStat }]
+          return {
+            player: {
+              ...s.player,
+              stats: {
+                ...s.player.stats,
+                [parentStat]: { subStats: updated, value: updated.reduce((sum, ss) => sum + ss.value, 0) },
+              },
+            },
+          }
+        })
         return id
       },
 
@@ -375,14 +378,11 @@ export const useGameStore = create<GameStore>()(
           if (!s.player) return {}
           const newStats = { ...s.player.stats }
           for (const stat of ALL_STAT_KEYS) {
-            const idx = newStats[stat].subStats.findIndex(ss => ss.id === subStatId)
-            if (idx !== -1) {
-              newStats[stat] = {
-                ...newStats[stat],
-                subStats: newStats[stat].subStats.map(ss =>
-                  ss.id === subStatId ? { ...ss, value: Math.min(100, Math.max(1, newValue)) } : ss
-                ),
-              }
+            if (newStats[stat].subStats.some(ss => ss.id === subStatId)) {
+              const updated = newStats[stat].subStats.map(ss =>
+                ss.id === subStatId ? { ...ss, value: Math.max(0, newValue) } : ss
+              )
+              newStats[stat] = { subStats: updated, value: updated.reduce((sum, ss) => sum + ss.value, 0) }
             }
           }
           return { player: { ...s.player, stats: newStats } }
@@ -394,22 +394,13 @@ export const useGameStore = create<GameStore>()(
           if (!s.player) return {}
           const newStats = { ...s.player.stats }
           for (const stat of ALL_STAT_KEYS) {
-            const idx = newStats[stat].subStats.findIndex(ss => ss.id === subStatId)
-            if (idx !== -1) {
-              newStats[stat] = {
-                ...newStats[stat],
-                subStats: newStats[stat].subStats.map(ss =>
-                  ss.id === subStatId
-                    ? {
-                        ...ss,
-                        ...updates,
-                        value: updates.value !== undefined
-                          ? Math.min(100, Math.max(1, updates.value))
-                          : ss.value,
-                      }
-                    : ss
-                ),
-              }
+            if (newStats[stat].subStats.some(ss => ss.id === subStatId)) {
+              const updated = newStats[stat].subStats.map(ss =>
+                ss.id === subStatId
+                  ? { ...ss, ...updates, value: updates.value !== undefined ? Math.max(0, updates.value) : ss.value }
+                  : ss
+              )
+              newStats[stat] = { subStats: updated, value: updated.reduce((sum, ss) => sum + ss.value, 0) }
             }
           }
           return { player: { ...s.player, stats: newStats } }
@@ -421,9 +412,9 @@ export const useGameStore = create<GameStore>()(
           if (!s.player) return {}
           const newStats = { ...s.player.stats }
           for (const stat of ALL_STAT_KEYS) {
-            newStats[stat] = {
-              ...newStats[stat],
-              subStats: newStats[stat].subStats.filter(ss => ss.id !== subStatId),
+            if (newStats[stat].subStats.some(ss => ss.id === subStatId)) {
+              const filtered = newStats[stat].subStats.filter(ss => ss.id !== subStatId)
+              newStats[stat] = { subStats: filtered, value: filtered.reduce((sum, ss) => sum + ss.value, 0) }
             }
           }
           return { player: { ...s.player, stats: newStats } }

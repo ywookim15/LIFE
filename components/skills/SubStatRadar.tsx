@@ -22,22 +22,21 @@ function polar(angle: number, r: number) {
 }
 
 function BarChart({ subStats, color }: { subStats: SubStat[]; color: string }) {
+  const maxVal = Math.max(1, ...subStats.map(ss => ss.value))
   return (
     <div className="space-y-2 p-2">
       {subStats.map(ss => (
         <div key={ss.id} className="space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-[#94a3b8]">{ss.name}</span>
-            <span className="font-orbitron text-[10px] text-[#93c5fd]">
-              {ss.value}<span className="text-[#374151]">/100</span>
-            </span>
+            <span className="font-orbitron text-[10px] text-[#93c5fd]">{ss.value}</span>
           </div>
           <div className="h-[4px]" style={{ backgroundColor: '#1e3a8a', borderRadius: '2px' }}>
             <motion.div
               className="h-full rounded-full"
               style={{ backgroundColor: color }}
               initial={{ width: 0 }}
-              animate={{ width: `${ss.value}%` }}
+              animate={{ width: `${(ss.value / maxVal) * 100}%` }}
               transition={{ duration: 0.8, ease: 'easeOut' }}
             />
           </div>
@@ -69,11 +68,12 @@ function WebChart({ subStats, color }: { subStats: SubStat[]; color: string }) {
   const n = subStats.length
   const angleStep = (2 * Math.PI) / n
   const gridLevels = [25, 50, 75, 100]
+  const maxVal = Math.max(1, ...subStats.map(ss => ss.value))
 
   const points = useMemo(() =>
     subStats.map((ss, i) => {
       const angle = i * angleStep
-      const r = (ss.value / 100) * MAX_R
+      const r = (ss.value / maxVal) * MAX_R
       return {
         ...polar(angle, r),
         outerX: polar(angle, MAX_R).x,
@@ -85,7 +85,7 @@ function WebChart({ subStats, color }: { subStats: SubStat[]; color: string }) {
         value: ss.value,
         id: ss.id,
       }
-    }), [subStats, angleStep])
+    }), [subStats, angleStep, maxVal])
 
   const polygonPath = points.length >= 3
     ? `M ${points.map(p => `${p.x},${p.y}`).join(' L ')} Z`
