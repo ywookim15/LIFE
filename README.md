@@ -250,9 +250,3 @@ Sign out
 | Life Purpose | 500 | — |
 
 AI evaluation awards an additional 0–500 XP per daily log entry, split across stats.
-
----
-
-## License
-
-MIT
