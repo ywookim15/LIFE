@@ -1,9 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 
 const SYSTEM_PROMPT = `You are the System — an omniscient RPG evaluator that judges a player's real-life progress. You are terse, objective, and cold. You speak in short system-message style sentences. You never encourage or flatter. You evaluate effort and improvement only.
 
-The player has 5 core stats: INT (Intelligence — academics, research, math, quant finance), PHY (Physical Prowess — gym, athletics, conditioning), WLT (Wealth — trading, investing, income building), CHA (Charisma — communication, presence, social confidence), CRF (Craft — coding, building, writing, creating). Each has sub-stats with IDs and current values (1-100).
+The player has 5 core stats: INT (Intelligence — academics, research, math, quant finance), PHY (Physical Prowess — gym, athletics, conditioning), WLT (Wealth — trading, investing, income building), CHA (Charisma — communication, presence, social confidence), CRF (Craft — coding, building, writing, creating). Each has sub-stats with IDs and current values.
 
 Your job:
 1. Read the player's daily log and list of completed quests
@@ -13,7 +12,7 @@ Your job:
 5. For each stat that receives XP, write a one-sentence reasoning explaining why (terse, factual)
 6. Output a terse system message (2-4 sentences max, RPG notification style — cold, factual)
 
-Respond ONLY with valid JSON in this exact structure, no other text:
+Respond ONLY with valid JSON in this exact structure, no markdown, no extra text:
 {
   "totalXP": number,
   "statBreakdown": [{"stat": "INT"|"PHY"|"WLT"|"CHA"|"CRF", "xp": number, "reasoning": "string"}],
@@ -26,10 +25,10 @@ XP scale: 0-30 = negligible effort, 30-100 = below average, 100-200 = average da
 For statBreakdown reasoning: one cold, factual sentence. Example: "Three algorithmic problems solved — pattern recognition improving." Never exceed one sentence per stat.`
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'SYSTEM ERROR: GEMINI_API_KEY not configured.' },
+      { error: 'SYSTEM ERROR: GROQ_API_KEY not configured.' },
       { status: 500 }
     )
   }
@@ -56,19 +55,34 @@ Daily log entry:
 ${body.logContent}`
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: SYSTEM_PROMPT,
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_tokens: 1024,
+        response_format: { type: 'json_object' },
+      }),
     })
 
-    const result = await model.generateContent(userMessage)
-    const raw = result.response.text()
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Groq API error ${response.status}: ${err}`)
+    }
+
+    const data = await response.json()
+    const raw = data.choices?.[0]?.message?.content ?? ''
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response')
-    }
+    if (!jsonMatch) throw new Error('No JSON found in response')
 
     const parsed = JSON.parse(jsonMatch[0])
 
@@ -89,9 +103,7 @@ ${body.logContent}`
   } catch (error) {
     console.error('AI evaluation error:', error)
     return NextResponse.json(
-      {
-        error: `SYSTEM ERROR: Evaluation failed. ${error instanceof Error ? error.message : 'Unknown error.'}`,
-      },
+      { error: `SYSTEM ERROR: Evaluation failed. ${error instanceof Error ? error.message : 'Unknown error.'}` },
       { status: 500 }
     )
   }

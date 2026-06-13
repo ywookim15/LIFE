@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 
 const SYSTEM_PROMPT = `You are the System — an omniscient RPG narrator that generates a cold, clinical character profile report. You are terse, analytical, and speak in system-log style. No flattery. No encouragement. Only facts and assessments.
@@ -8,7 +7,7 @@ Your report has three sections:
 2. WEEKLY TRAJECTORY — 2-3 sentences. Analyze the last 7 days of progress. What moved? What stagnated? What declined?
 3. SYSTEM DIRECTIVE — 1-2 sentences. One cold, actionable directive based on the weakest vector. Not motivational. Tactical.
 
-Respond ONLY with valid JSON:
+Respond ONLY with valid JSON, no markdown, no extra text:
 {
   "characterAssessment": "string",
   "weeklyTrajectory": "string",
@@ -16,10 +15,10 @@ Respond ONLY with valid JSON:
 }`
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'SYSTEM ERROR: GEMINI_API_KEY not configured.' },
+      { error: 'SYSTEM ERROR: GROQ_API_KEY not configured.' },
       { status: 500 }
     )
   }
@@ -70,14 +69,31 @@ Active Quests:
 ${questList}`
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: SYSTEM_PROMPT,
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.4,
+        max_tokens: 1024,
+        response_format: { type: 'json_object' },
+      }),
     })
 
-    const result = await model.generateContent(userMessage)
-    const raw = result.response.text()
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Groq API error ${response.status}: ${err}`)
+    }
+
+    const data = await response.json()
+    const raw = data.choices?.[0]?.message?.content ?? ''
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
