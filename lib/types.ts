@@ -120,3 +120,50 @@ export interface LevelUpData {
   newTier: Tier
   tieredUp: boolean
 }
+
+// ─── Workout / Body System ─────────────────────────────────────────────────
+
+export type MuscleGroup =
+  | 'chest' | 'back' | 'triceps' | 'biceps' | 'forearms'
+  | 'abs' | 'calves' | 'quads' | 'hamstrings' | 'shoulders'
+
+export const ALL_MUSCLES: MuscleGroup[] = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps',
+  'forearms', 'abs', 'quads', 'hamstrings', 'calves',
+]
+
+export interface LoggedSet {
+  reps: number
+  weight: number // lbs
+}
+
+export interface LoggedExercise {
+  name: string
+  muscleGroups: MuscleGroup[]
+  sets: LoggedSet[]
+}
+
+export interface WorkoutLog {
+  id: string
+  date: string // YYYY-MM-DD
+  planId?: string
+  planName?: string
+  exercises: LoggedExercise[]
+  notes?: string
+}
+
+export interface PlanExercise {
+  id: string
+  name: string
+  muscleGroups: MuscleGroup[]
+  sets: number
+  reps: number
+  weight?: number
+}
+
+export interface WorkoutPlan {
+  id: string
+  name: string
+  exercises: PlanExercise[]
+  createdAt: string
+}

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import {
   Player, Quest, DailyLog, Achievement, Title, PartyMember,
   LevelUpData, StatKey, AIEvaluation, StatBlock, SubStat, StatSnapshot,
+  WorkoutPlan, WorkoutLog,
 } from './types'
 import {
   calcXPToNext, getNextTier, generateId, getTodayDate,
@@ -51,6 +52,13 @@ interface GameStore {
   addPartyMember: (member: PartyMember) => void
   removePartyMember: (memberId: string) => void
 
+  workoutPlans: WorkoutPlan[]
+  workoutLogs: WorkoutLog[]
+  addWorkoutPlan: (plan: Omit<WorkoutPlan, 'id' | 'createdAt'>) => void
+  deleteWorkoutPlan: (planId: string) => void
+  logWorkout: (log: Omit<WorkoutLog, 'id'>) => void
+  deleteWorkoutLog: (logId: string) => void
+
   snapshotStatHistory: () => void
   checkAndUnlockAchievements: () => string[]
   clearPendingLevelUp: () => void
@@ -67,6 +75,8 @@ export const useGameStore = create<GameStore>()(
       achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
       titles: DEFAULT_TITLES.map(t => ({ ...t })),
       partyMembers: [],
+      workoutPlans: [],
+      workoutLogs: [],
       pendingLevelUp: null,
       _hasHydrated: false,
       _migrated: false,
@@ -86,6 +96,8 @@ export const useGameStore = create<GameStore>()(
           achievements: d.achievements ?? DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
           titles: d.titles ?? DEFAULT_TITLES.map(t => ({ ...t })),
           partyMembers: d.partyMembers ?? [],
+          workoutPlans: d.workoutPlans ?? [],
+          workoutLogs: d.workoutLogs ?? [],
           _migrated: d._migrated ?? false,
           _hasHydrated: false,
         })
@@ -446,6 +458,35 @@ export const useGameStore = create<GameStore>()(
         return newIds
       },
 
+      addWorkoutPlan: (plan) => {
+        const newPlan: WorkoutPlan = { ...plan, id: generateId(), createdAt: new Date().toISOString() }
+        set(s => ({ workoutPlans: [...s.workoutPlans, newPlan] }))
+      },
+
+      deleteWorkoutPlan: (planId) => {
+        set(s => ({ workoutPlans: s.workoutPlans.filter(p => p.id !== planId) }))
+      },
+
+      logWorkout: (log) => {
+        const newLog: WorkoutLog = { ...log, id: generateId() }
+        set(s => ({ workoutLogs: [...s.workoutLogs, newLog] }))
+
+        const uniqueMuscles = [...new Set(log.exercises.flatMap(e => e.muscleGroups))]
+        const totalSets = log.exercises.reduce((sum, e) => sum + e.sets.length, 0)
+        const xp = Math.min(200, Math.round(uniqueMuscles.length * 12 + totalSets * 6))
+        if (xp > 0) {
+          get().awardXP(xp, [{
+            stat: 'PHY',
+            xp,
+            reasoning: `Workout: ${uniqueMuscles.length} muscle groups, ${totalSets} sets`,
+          }])
+        }
+      },
+
+      deleteWorkoutLog: (logId) => {
+        set(s => ({ workoutLogs: s.workoutLogs.filter(l => l.id !== logId) }))
+      },
+
       snapshotStatHistory: () => {
         const { player } = get()
         if (!player) return
@@ -567,6 +608,8 @@ export const useGameStore = create<GameStore>()(
           achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
           titles: DEFAULT_TITLES.map(t => ({ ...t })),
           partyMembers: [],
+          workoutPlans: [],
+          workoutLogs: [],
           pendingLevelUp: null,
           _migrated: false,
         })

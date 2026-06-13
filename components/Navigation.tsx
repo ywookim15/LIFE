@@ -52,6 +52,19 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/body',
+    label: 'Body',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="4" r="2" />
+        <path d="M12 6v6" />
+        <path d="M8 9l4 3 4-3" />
+        <path d="M10 12v6l-2 3" />
+        <path d="M14 12v6l2 3" />
+      </svg>
+    ),
+  },
+  {
     href: '/log',
     label: 'Log',
     icon: (
