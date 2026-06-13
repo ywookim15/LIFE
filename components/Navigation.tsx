@@ -40,6 +40,18 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/character',
+    label: 'Character',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+        <path d="M16 3.5c1.5.5 2.5 2 2.5 3.5" />
+        <path d="M17 12.5c2 1 3 3 3 5" />
+      </svg>
+    ),
+  },
+  {
     href: '/log',
     label: 'Log',
     icon: (

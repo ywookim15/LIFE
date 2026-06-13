@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useGameStore } from '@/lib/store'
 import { useNotification } from '@/contexts/NotificationContext'
+import { useAuth } from '@/contexts/AuthContext'
 import SystemPanel from '@/components/ui/SystemPanel'
 import TierBadge from '@/components/ui/TierBadge'
-import { getDaysActive, getTodayDate } from '@/lib/gameLogic'
+import { getDaysActive } from '@/lib/gameLogic'
 
 export default function SettingsPage() {
   const player = useGameStore(s => s.player)
@@ -14,10 +15,15 @@ export default function SettingsPage() {
   const logs = useGameStore(s => s.logs)
   const quests = useGameStore(s => s.quests)
   const { notify } = useNotification()
+  const { user, signOut, deleteAccount } = useAuth()
 
   const [newName, setNewName] = useState(player?.name || '')
   const [confirmReset, setConfirmReset] = useState(false)
   const [confirmText, setConfirmText] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteText, setDeleteText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [signOutLoading, setSignOutLoading] = useState(false)
 
   if (!player) return null
 
@@ -32,6 +38,22 @@ export default function SettingsPage() {
     if (confirmText !== 'RESET') return
     resetGame()
     notify('SYSTEM RESET. All data cleared.', 'error')
+  }
+
+  const handleSignOut = async () => {
+    setSignOutLoading(true)
+    await signOut()
+  }
+
+  const handleDeleteAccount = async () => {
+    if (deleteText !== 'DELETE') return
+    setDeleteLoading(true)
+    const err = await deleteAccount()
+    if (err) {
+      notify(`Error: ${err}`, 'error')
+      setDeleteLoading(false)
+    }
+    // On success, AuthContext signs out and clears state
   }
 
   const totalSubStats = Object.values(player.stats).reduce(
@@ -150,6 +172,38 @@ export default function SettingsPage() {
         </div>
       </SystemPanel>
 
+      {/* Account */}
+      <SystemPanel title="Account" delay={0.12}>
+        <div className="p-4 space-y-3">
+          <div
+            className="p-3"
+            style={{
+              border: '1px solid #1e3a8a',
+              borderRadius: '2px',
+              backgroundColor: 'rgba(30, 58, 138, 0.05)',
+            }}
+          >
+            <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest mb-1">Signed in as</p>
+            <p className="font-orbitron text-xs text-[#93c5fd]">{user?.email}</p>
+          </div>
+
+          <button
+            onClick={handleSignOut}
+            disabled={signOutLoading}
+            className="w-full py-2.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
+            style={{
+              border: '1px solid #1e3a8a',
+              borderRadius: '2px',
+              background: 'transparent',
+              color: signOutLoading ? '#374151' : '#64748b',
+              cursor: signOutLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {signOutLoading ? 'Signing Out...' : 'Sign Out'}
+          </button>
+        </div>
+      </SystemPanel>
+
       {/* Danger zone */}
       <SystemPanel title="Danger Zone" headerColor="#7f1d1d" delay={0.15}>
         <div className="p-4 space-y-4">
@@ -160,7 +214,6 @@ export default function SettingsPage() {
           {!confirmReset ? (
             <button
               onClick={() => setConfirmReset(true)}
-              className="btn-system-danger py-2 px-4"
               style={{
                 fontFamily: 'Orbitron, monospace',
                 fontSize: '10px',
@@ -174,12 +227,12 @@ export default function SettingsPage() {
                 textTransform: 'uppercase',
               }}
             >
-              Reset System
+              Reset Game Data
             </button>
           ) : (
             <div className="space-y-3">
               <p className="font-orbitron text-[10px] text-[#ef4444] uppercase tracking-wider">
-                Type "RESET" to confirm destruction of all data:
+                Type &quot;RESET&quot; to confirm — this wipes your game data but keeps your account:
               </p>
               <input
                 type="text"
@@ -215,6 +268,70 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          <div className="border-t border-[#7f1d1d] pt-4 mt-4">
+            <p className="text-[11px] text-[#64748b] mb-3">
+              Permanently delete your account and all associated data. This cannot be undone.
+            </p>
+            {!confirmDelete ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                style={{
+                  fontFamily: 'Orbitron, monospace',
+                  fontSize: '10px',
+                  letterSpacing: '0.1em',
+                  background: 'rgba(127, 29, 29, 0.1)',
+                  border: '1px solid #7f1d1d',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  borderRadius: '2px',
+                  padding: '8px 16px',
+                  textTransform: 'uppercase',
+                  opacity: 0.7,
+                }}
+              >
+                Delete Account
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <p className="font-orbitron text-[10px] text-[#ef4444] uppercase tracking-wider">
+                  Type &quot;DELETE&quot; to permanently erase your account:
+                </p>
+                <input
+                  type="text"
+                  value={deleteText}
+                  onChange={e => setDeleteText(e.target.value)}
+                  className="input-system"
+                  placeholder="Type DELETE to confirm..."
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setConfirmDelete(false); setDeleteText('') }}
+                    className="btn-system flex-1 py-2"
+                    disabled={deleteLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={deleteText !== 'DELETE' || deleteLoading}
+                    className="flex-1 py-2 font-orbitron text-[10px] uppercase tracking-wider"
+                    style={{
+                      fontFamily: 'Orbitron, monospace',
+                      fontSize: '10px',
+                      background: deleteText === 'DELETE' ? 'rgba(127, 29, 29, 0.5)' : 'rgba(127, 29, 29, 0.1)',
+                      border: `1px solid ${deleteText === 'DELETE' ? '#ef4444' : '#7f1d1d'}`,
+                      color: deleteText === 'DELETE' ? '#ef4444' : '#374151',
+                      cursor: deleteText === 'DELETE' && !deleteLoading ? 'pointer' : 'not-allowed',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </SystemPanel>
     </div>

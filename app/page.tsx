@@ -3,7 +3,6 @@
 import { useGameStore } from '@/lib/store'
 import CharacterCard from '@/components/dashboard/CharacterCard'
 import StatGrid from '@/components/dashboard/StatGrid'
-import ActiveDebuffs from '@/components/dashboard/ActiveDebuffs'
 import SystemPanel from '@/components/ui/SystemPanel'
 import { getTodayDate } from '@/lib/gameLogic'
 
@@ -19,7 +18,7 @@ export default function DashboardPage() {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5)
 
-  const todayQuests = quests.filter(q => q.type === 'daily' && q.status === 'active')
+  const todayQuests = quests.filter(q => q.type === 'habit' && q.status === 'active')
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -41,7 +40,6 @@ export default function DashboardPage() {
         {/* Left column */}
         <div className="space-y-4">
           <CharacterCard />
-          <ActiveDebuffs />
 
           {todayQuests.length > 0 && (
             <SystemPanel title="Daily Objectives" delay={0.2}>

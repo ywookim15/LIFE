@@ -11,7 +11,7 @@ const MAX_R = 150
 const OUTER_R = 175
 const SVG_SIZE = 400
 const GAP_RAD = 0.15
-const SECTOR_RAD = (2 * Math.PI) / 6
+const SECTOR_RAD = (2 * Math.PI) / 5
 
 function polar(angle: number, r: number) {
   return {
@@ -190,13 +190,32 @@ export default function SkillRadar({ player }: SkillRadarProps) {
           />
         ))}
 
-        {/* Filled polygon */}
+        {/* Per-sector filled areas */}
+        {ALL_STAT_KEYS.map((stat) => {
+          const color = getStatColor(stat)
+          const sectorVerts = vertices.filter(v => v.stat === stat)
+          if (sectorVerts.length === 0) return null
+          const path = `M ${CX},${CY} ${sectorVerts.map(v => `L ${v.x},${v.y}`).join(' ')} Z`
+          return (
+            <path
+              key={`fill-${stat}`}
+              d={path}
+              fill={color}
+              fillOpacity={0.25}
+              stroke={color}
+              strokeWidth={1}
+              strokeOpacity={0.5}
+            />
+          )
+        })}
+
+        {/* Polygon outline connecting all vertices */}
         {polygonPath && (
           <motion.path
             d={polygonPath}
-            fill="rgba(59, 130, 246, 0.15)"
-            stroke="#3b82f6"
-            strokeWidth={1.5}
+            fill="none"
+            stroke="rgba(147, 197, 253, 0.4)"
+            strokeWidth={1}
             initial={{ opacity: 0, pathLength: 0 }}
             animate={{ opacity: 1, pathLength: 1 }}
             transition={{ duration: 1.5, ease: 'easeInOut' }}

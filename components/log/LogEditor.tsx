@@ -22,7 +22,7 @@ export default function LogEditor({ onEvaluationComplete }: LogEditorProps) {
   const [error, setError] = useState<string | null>(null)
 
   const today = getTodayDate()
-  const todayDailyQuests = quests.filter(q => q.type === 'daily' && q.status === 'active')
+  const todayDailyQuests = quests.filter(q => q.type === 'habit' && q.status === 'active')
 
   const toggleQuest = (id: string) => {
     setCheckedQuests(prev => {
@@ -39,7 +39,6 @@ export default function LogEditor({ onEvaluationComplete }: LogEditorProps) {
     setError(null)
 
     const completedIds = Array.from(checkedQuests)
-    const log = submitLog(content, completedIds)
 
     const questList = todayDailyQuests
       .map(q => `- "${q.title}" [${q.linkedStat}]: ${checkedQuests.has(q.id) ? 'COMPLETED' : 'NOT COMPLETED'}`)
@@ -60,7 +59,6 @@ export default function LogEditor({ onEvaluationComplete }: LogEditorProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playerStats: player.stats,
-          activeDebuffs: player.activeDebuffs,
           questList,
           logContent: content,
           subStats: allSubStats,
@@ -73,19 +71,20 @@ export default function LogEditor({ onEvaluationComplete }: LogEditorProps) {
         throw new Error(data.error || 'Evaluation failed')
       }
 
+      // Submit log only after successful evaluation so errors remain visible
+      const log = submitLog(content, completedIds)
+
       const evaluation: AIEvaluation = {
         xpAwarded: data.totalXP,
         statBreakdown: data.statBreakdown,
         subStatUpdates: data.subStatUpdates,
         systemMessage: data.systemMessage,
-        debuffsApplied: data.debuffsApplied,
-        debuffsLifted: data.debuffsLifted,
         evaluatedAt: new Date().toISOString(),
       }
 
       onEvaluationComplete(log.id, evaluation)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Evaluation failed. Check API key.')
+      setError(err instanceof Error ? err.message : 'Evaluation failed. Check your GEMINI_API_KEY in .env.local.')
       setLoading(false)
     }
   }

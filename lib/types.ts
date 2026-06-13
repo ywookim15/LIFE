@@ -1,9 +1,10 @@
 export type Tier = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+' | 'X'
-export type StatKey = 'INT' | 'STR' | 'AGI' | 'END' | 'WIS' | 'CHA'
+export type StatKey = 'INT' | 'PHY' | 'WLT' | 'CHA' | 'CRF'
 
 export interface SubStat {
   id: string
   name: string
+  description: string
   value: number // 1-100
   parentStat: StatKey
 }
@@ -11,6 +12,14 @@ export interface SubStat {
 export interface StatBlock {
   value: number // 1-999
   subStats: SubStat[]
+}
+
+export interface StatSnapshot {
+  date: string // YYYY-MM-DD
+  stats: Record<StatKey, number>
+  totalXP: number
+  level: number
+  tier: Tier
 }
 
 export interface Player {
@@ -23,15 +32,15 @@ export interface Player {
   xpToNext: number
   totalXP: number
   stats: Record<StatKey, StatBlock>
-  activeDebuffs: Debuff[]
   createdAt: string
+  statHistory?: StatSnapshot[]
 }
 
 export interface Quest {
   id: string
   title: string
   description: string
-  type: 'daily' | 'side' | 'main'
+  type: 'habit' | 'today' | 'weekly' | 'yearly' | 'lifePurpose'
   status: 'active' | 'completed' | 'failed'
   linkedStat: StatKey
   linkedSubStats: string[]
@@ -40,6 +49,10 @@ export interface Quest {
   completedAt?: string
   milestones?: Milestone[]
   xpAwarded?: number
+  isRecurring?: boolean
+  lastResetDate?: string
+  streak?: number
+  completionLog?: { date: string; status: 'completed' | 'failed' }[]
 }
 
 export interface Milestone {
@@ -58,30 +71,16 @@ export interface DailyLog {
 
 export interface AIEvaluation {
   xpAwarded: number
-  statBreakdown: { stat: StatKey; xp: number }[]
+  statBreakdown: { stat: StatKey; xp: number; reasoning: string }[]
   subStatUpdates?: { id: string; increase: number }[]
   systemMessage: string
-  debuffsApplied: Debuff[]
-  debuffsLifted: string[]
   evaluatedAt: string
-}
-
-export interface Debuff {
-  id: string
-  name: string
-  description: string
-  affectedStat: StatKey
-  penalty: number
-  appliedAt: string
-  clearedAt?: string
-  clearCondition: string
 }
 
 export type AchievementCondition =
   | { type: 'quest_count'; count: number }
   | { type: 'tier_reached'; tier: Tier }
   | { type: 'daily_streak'; days: number }
-  | { type: 'debuff_cleared'; count: number }
   | { type: 'substat_value'; value: number }
   | { type: 'substat_count_above'; count: number; threshold: number }
   | { type: 'level_reached'; level: number }

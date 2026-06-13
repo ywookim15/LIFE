@@ -12,22 +12,28 @@ export default function StatGrid() {
 
   return (
     <SystemPanel title="Core Statistics" delay={0.1}>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-0 divide-x divide-y divide-[#1e3a8a]">
+      <div
+        className="grid grid-cols-2 md:grid-cols-5 gap-px"
+        style={{ background: '#1e3a8a' }}
+      >
         {ALL_STAT_KEYS.map((stat, i) => (
-          <StatBlock key={stat} stat={stat} block={player.stats[stat]} index={i} />
+          <StatBlock key={stat} stat={stat} block={player.stats[stat]} index={i} total={ALL_STAT_KEYS.length} />
         ))}
       </div>
     </SystemPanel>
   )
 }
 
-function StatBlock({ stat, block, index }: { stat: StatKey; block: { value: number; subStats: any[] }; index: number }) {
+function StatBlock({ stat, block, index, total }: { stat: StatKey; block: { value: number; subStats: any[] }; index: number; total: number }) {
   const color = getStatColor(stat)
   const topSubStats = [...block.subStats].sort((a, b) => b.value - a.value).slice(0, 3)
+  // On mobile (2-col), last item spans full row if total is odd
+  const spanClass = index === total - 1 && total % 2 !== 0 ? 'col-span-2 md:col-span-1' : ''
 
   return (
     <motion.div
-      className="p-3 space-y-2"
+      className={`p-3 space-y-2 ${spanClass}`}
+      style={{ background: 'rgb(10, 15, 40)' }}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 + index * 0.05 }}

@@ -1,4 +1,4 @@
-import { Achievement, Title, Player, StatKey, StatBlock } from './types'
+import { Achievement, Title, Player, StatBlock } from './types'
 import { calcXPToNext, generateId } from './gameLogic'
 
 export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
@@ -19,12 +19,6 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     title: 'The Grind',
     description: 'Complete 7 daily quests in a row.',
     condition: { type: 'daily_streak', days: 7 },
-  },
-  {
-    id: 'iron_will',
-    title: 'Iron Will',
-    description: 'Clear a debuff.',
-    condition: { type: 'debuff_cleared', count: 1 },
   },
   {
     id: 'specialist',
@@ -77,13 +71,6 @@ export const DEFAULT_TITLES: Title[] = [
     description: 'One who has crossed the threshold.',
     equipped: false,
     achievementId: 'awakened',
-  },
-  {
-    id: 'title_relentless',
-    name: 'The Relentless',
-    description: 'One who does not yield to failure.',
-    equipped: false,
-    achievementId: 'iron_will',
   },
   {
     id: 'title_code_monk',
@@ -142,13 +129,12 @@ export function createInitialPlayer(name: string): Player {
     totalXP: 0,
     stats: {
       INT: emptyStatBlock(),
-      STR: emptyStatBlock(),
-      AGI: emptyStatBlock(),
-      END: emptyStatBlock(),
-      WIS: emptyStatBlock(),
+      PHY: emptyStatBlock(),
+      WLT: emptyStatBlock(),
       CHA: emptyStatBlock(),
+      CRF: emptyStatBlock(),
     },
-    activeDebuffs: [],
     createdAt: new Date().toISOString(),
+    statHistory: [],
   }
 }

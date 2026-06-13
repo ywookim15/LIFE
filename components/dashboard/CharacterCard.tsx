@@ -92,7 +92,7 @@ export default function CharacterCard() {
         <div className="grid grid-cols-3 gap-2 pt-1">
           <StatCell label="Total XP" value={player.totalXP.toLocaleString()} color="#fbbf24" />
           <StatCell label="Days Active" value={daysActive.toString()} color="#93c5fd" />
-          <StatCell label="Debuffs" value={player.activeDebuffs.length.toString()} color={player.activeDebuffs.length > 0 ? '#ef4444' : '#4fffb0'} />
+          <StatCell label="History" value={`${(player.statHistory ?? []).length}d`} color="#93c5fd" />
         </div>
       </div>
     </SystemPanel>

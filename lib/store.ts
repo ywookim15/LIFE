@@ -1,12 +1,11 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import {
   Player, Quest, DailyLog, Achievement, Title, PartyMember,
-  Debuff, LevelUpData, StatKey, AIEvaluation, Milestone,
+  LevelUpData, StatKey, AIEvaluation, StatBlock, SubStat, StatSnapshot,
 } from './types'
 import {
   calcXPToNext, getNextTier, generateId, getTodayDate,
-  checkAchievements, ALL_STAT_KEYS,
+  checkAchievements, ALL_STAT_KEYS, getStreakMultiplier,
 } from './gameLogic'
 import { createInitialPlayer, DEFAULT_ACHIEVEMENTS, DEFAULT_TITLES } from './defaultData'
 
@@ -18,62 +17,50 @@ interface GameStore {
   titles: Title[]
   partyMembers: PartyMember[]
   pendingLevelUp: LevelUpData | null
-  clearedDebuffCount: number
   _hasHydrated: boolean
+  _migrated: boolean
 
   setHasHydrated: (v: boolean) => void
+  loadGameState: (data: unknown) => void
   initPlayer: (name: string) => void
   updatePlayerName: (name: string) => void
   equipTitle: (titleId: string) => void
 
   awardXP: (
     totalXP: number,
-    breakdown: { stat: StatKey; xp: number }[],
+    breakdown: { stat: StatKey; xp: number; reasoning: string }[],
     subStatUpdates?: { id: string; increase: number }[]
   ) => { leveledUp: boolean; tieredUp: boolean; newlyUnlocked: string[] }
 
   addQuest: (quest: Omit<Quest, 'id' | 'createdAt' | 'status'>) => void
+  updateQuest: (questId: string, updates: Partial<Omit<Quest, 'id' | 'createdAt' | 'status'>>) => void
   completeQuest: (questId: string) => void
   failQuest: (questId: string) => void
   deleteQuest: (questId: string) => void
   updateMilestone: (questId: string, milestoneId: string, completed: boolean) => void
-
-  applyDebuff: (debuff: Omit<Debuff, 'id' | 'appliedAt'>) => void
-  liftDebuff: (debuffId: string) => void
+  resetDueHabits: () => void
 
   submitLog: (content: string, completedQuestIds: string[]) => DailyLog
   updateLogEvaluation: (logId: string, evaluation: AIEvaluation) => void
 
-  addSubStat: (parentStat: StatKey, name: string) => string
+  addSubStat: (parentStat: StatKey, name: string, description?: string) => string
   updateSubStatValue: (subStatId: string, newValue: number) => void
+  updateSubStat: (subStatId: string, updates: Partial<Pick<SubStat, 'name' | 'description' | 'value'>>) => void
+  deleteSubStat: (subStatId: string) => void
 
   addPartyMember: (member: PartyMember) => void
   removePartyMember: (memberId: string) => void
 
+  snapshotStatHistory: () => void
   checkAndUnlockAchievements: () => string[]
   clearPendingLevelUp: () => void
+  migrateIfNeeded: () => void
   resetGame: () => void
   exportProfile: () => string
 }
 
-const safeLocalStorage = createJSONStorage(() => ({
-  getItem: (name: string) => {
-    if (typeof window === 'undefined') return null
-    return window.localStorage.getItem(name)
-  },
-  setItem: (name: string, value: string) => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(name, value)
-  },
-  removeItem: (name: string) => {
-    if (typeof window === 'undefined') return
-    window.localStorage.removeItem(name)
-  },
-}))
-
 export const useGameStore = create<GameStore>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       player: null,
       quests: [],
       logs: [],
@@ -81,10 +68,31 @@ export const useGameStore = create<GameStore>()(
       titles: DEFAULT_TITLES.map(t => ({ ...t })),
       partyMembers: [],
       pendingLevelUp: null,
-      clearedDebuffCount: 0,
       _hasHydrated: false,
+      _migrated: false,
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
+
+      loadGameState: (raw) => {
+        const d = raw as Partial<GameStore> | null
+        if (!d) {
+          set({ _hasHydrated: true })
+          return
+        }
+        set({
+          player: d.player ?? null,
+          quests: d.quests ?? [],
+          logs: d.logs ?? [],
+          achievements: d.achievements ?? DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
+          titles: d.titles ?? DEFAULT_TITLES.map(t => ({ ...t })),
+          partyMembers: d.partyMembers ?? [],
+          _migrated: d._migrated ?? false,
+          _hasHydrated: false,
+        })
+        get().migrateIfNeeded()
+        get().resetDueHabits()
+        set({ _hasHydrated: true })
+      },
 
       initPlayer: (name) => {
         set({
@@ -93,7 +101,7 @@ export const useGameStore = create<GameStore>()(
           logs: [],
           achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
           titles: DEFAULT_TITLES.map(t => ({ ...t })),
-          clearedDebuffCount: 0,
+          _migrated: true,
         })
       },
 
@@ -113,7 +121,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       awardXP: (totalXP, breakdown, subStatUpdates) => {
-        const { player, logs, achievements, titles, clearedDebuffCount } = get()
+        const { player, logs, achievements, titles } = get()
         if (!player) return { leveledUp: false, tieredUp: false, newlyUnlocked: [] }
 
         let currentXP = player.xp + totalXP
@@ -139,6 +147,7 @@ export const useGameStore = create<GameStore>()(
 
         const newStats = { ...player.stats }
         for (const { stat, xp } of breakdown) {
+          if (!newStats[stat]) continue
           const inc = Math.floor(xp / 10)
           newStats[stat] = {
             ...newStats[stat],
@@ -146,7 +155,6 @@ export const useGameStore = create<GameStore>()(
           }
         }
 
-        // Apply sub-stat updates from AI
         if (subStatUpdates) {
           for (const { id, increase } of subStatUpdates) {
             for (const stat of ALL_STAT_KEYS) {
@@ -163,6 +171,16 @@ export const useGameStore = create<GameStore>()(
           }
         }
 
+        const today = getTodayDate()
+        const existingSnap = (player.statHistory ?? []).find(s => s.date === today)
+        const newSnapshot: StatSnapshot | null = existingSnap ? null : {
+          date: today,
+          stats: Object.fromEntries(ALL_STAT_KEYS.map(k => [k, newStats[k].value])) as Record<StatKey, number>,
+          totalXP: player.totalXP + totalXP,
+          level: newLevel,
+          tier: newTier,
+        }
+
         const newPlayer: Player = {
           ...player,
           xp: currentXP,
@@ -171,6 +189,9 @@ export const useGameStore = create<GameStore>()(
           tier: newTier,
           totalXP: player.totalXP + totalXP,
           stats: newStats,
+          statHistory: newSnapshot
+            ? [...(player.statHistory ?? []), newSnapshot].slice(-365)
+            : (player.statHistory ?? []),
         }
 
         set({ player: newPlayer })
@@ -201,35 +222,45 @@ export const useGameStore = create<GameStore>()(
         set(s => ({ quests: [...s.quests, newQuest] }))
       },
 
+      updateQuest: (questId, updates) => {
+        set(s => ({
+          quests: s.quests.map(q =>
+            q.id === questId ? { ...q, ...updates } : q
+          ),
+        }))
+      },
+
       completeQuest: (questId) => {
         const now = new Date().toISOString()
+        const quest = get().quests.find(q => q.id === questId)
+        if (!quest) return
+
         set(s => ({
           quests: s.quests.map(q =>
             q.id === questId ? { ...q, status: 'completed', completedAt: now } : q
           ),
         }))
+
+        const BASE_XP: Record<Quest['type'], number> = {
+          habit: 50, today: 75, weekly: 150, yearly: 300, lifePurpose: 500,
+        }
+        const streakBonus = quest.type === 'habit' ? getStreakMultiplier(quest.streak ?? 0) : 1.0
+        const totalXP = Math.round((BASE_XP[quest.type] ?? 75) * streakBonus)
+
+        get().awardXP(totalXP, [{
+          stat: quest.linkedStat,
+          xp: totalXP,
+          reasoning: `${quest.type} quest completed`,
+        }])
         get().checkAndUnlockAchievements()
       },
 
       failQuest: (questId) => {
-        const { quests } = get()
-        const quest = quests.find(q => q.id === questId)
-        if (!quest) return
         set(s => ({
           quests: s.quests.map(q =>
             q.id === questId ? { ...q, status: 'failed' } : q
           ),
         }))
-        // Auto-apply debuff for failed daily quest
-        if (quest.type === 'daily') {
-          get().applyDebuff({
-            name: `${quest.linkedStat} DEBUFF`,
-            description: `Failed daily quest: "${quest.title}"`,
-            affectedStat: quest.linkedStat,
-            penalty: 5,
-            clearCondition: `Complete 3 active ${quest.linkedStat} quests`,
-          })
-        }
       },
 
       deleteQuest: (questId) => {
@@ -251,37 +282,38 @@ export const useGameStore = create<GameStore>()(
         }))
       },
 
-      applyDebuff: (debuffData) => {
-        const { player } = get()
-        if (!player) return
-        const newDebuff: Debuff = {
-          ...debuffData,
-          id: generateId(),
-          appliedAt: new Date().toISOString(),
-        }
+      resetDueHabits: () => {
+        const today = getTodayDate()
         set(s => ({
-          player: s.player
-            ? { ...s.player, activeDebuffs: [...s.player.activeDebuffs, newDebuff] }
-            : null,
-        }))
-      },
-
-      liftDebuff: (debuffId) => {
-        const { player } = get()
-        if (!player) return
-        const now = new Date().toISOString()
-        set(s => ({
-          player: s.player
-            ? {
-                ...s.player,
-                activeDebuffs: s.player.activeDebuffs.map(d =>
-                  d.id === debuffId ? { ...d, clearedAt: now } : d
-                ).filter(d => d.id !== debuffId),
+          quests: s.quests.map(q => {
+            if (q.type !== 'habit' || !q.isRecurring) return q
+            if (q.lastResetDate === today) return q
+            const prevDate = q.lastResetDate
+            if (q.status === 'completed') {
+              return {
+                ...q,
+                status: 'active' as const,
+                lastResetDate: today,
+                streak: (q.streak ?? 0) + 1,
+                completionLog: prevDate
+                  ? [...(q.completionLog ?? []), { date: prevDate, status: 'completed' as const }]
+                  : (q.completionLog ?? []),
               }
-            : null,
-          clearedDebuffCount: s.clearedDebuffCount + 1,
+            }
+            if (q.status === 'failed') {
+              return {
+                ...q,
+                status: 'active' as const,
+                lastResetDate: today,
+                streak: 0,
+                completionLog: prevDate
+                  ? [...(q.completionLog ?? []), { date: prevDate, status: 'failed' as const }]
+                  : (q.completionLog ?? []),
+              }
+            }
+            return q
+          }),
         }))
-        get().checkAndUnlockAchievements()
       },
 
       submitLog: (content, completedQuestIds) => {
@@ -301,30 +333,10 @@ export const useGameStore = create<GameStore>()(
             l.id === logId ? { ...l, aiEvaluation: evaluation } : l
           ),
         }))
-
-        // Apply debuffs from evaluation
-        for (const debuff of evaluation.debuffsApplied) {
-          const newDebuff: Debuff = {
-            ...debuff,
-            appliedAt: new Date().toISOString(),
-          }
-          set(s => ({
-            player: s.player
-              ? { ...s.player, activeDebuffs: [...s.player.activeDebuffs, newDebuff] }
-              : null,
-          }))
-        }
-
-        // Lift debuffs from evaluation
-        for (const id of evaluation.debuffsLifted) {
-          get().liftDebuff(id)
-        }
-
-        // Award XP
         get().awardXP(evaluation.xpAwarded, evaluation.statBreakdown, evaluation.subStatUpdates)
       },
 
-      addSubStat: (parentStat, name) => {
+      addSubStat: (parentStat, name, description = '') => {
         const id = generateId()
         set(s => ({
           player: s.player
@@ -336,7 +348,7 @@ export const useGameStore = create<GameStore>()(
                     ...s.player.stats[parentStat],
                     subStats: [
                       ...s.player.stats[parentStat].subStats,
-                      { id, name, value: 1, parentStat },
+                      { id, name, description, value: 1, parentStat },
                     ],
                   },
                 },
@@ -365,6 +377,47 @@ export const useGameStore = create<GameStore>()(
         })
       },
 
+      updateSubStat: (subStatId, updates) => {
+        set(s => {
+          if (!s.player) return {}
+          const newStats = { ...s.player.stats }
+          for (const stat of ALL_STAT_KEYS) {
+            const idx = newStats[stat].subStats.findIndex(ss => ss.id === subStatId)
+            if (idx !== -1) {
+              newStats[stat] = {
+                ...newStats[stat],
+                subStats: newStats[stat].subStats.map(ss =>
+                  ss.id === subStatId
+                    ? {
+                        ...ss,
+                        ...updates,
+                        value: updates.value !== undefined
+                          ? Math.min(100, Math.max(1, updates.value))
+                          : ss.value,
+                      }
+                    : ss
+                ),
+              }
+            }
+          }
+          return { player: { ...s.player, stats: newStats } }
+        })
+      },
+
+      deleteSubStat: (subStatId) => {
+        set(s => {
+          if (!s.player) return {}
+          const newStats = { ...s.player.stats }
+          for (const stat of ALL_STAT_KEYS) {
+            newStats[stat] = {
+              ...newStats[stat],
+              subStats: newStats[stat].subStats.filter(ss => ss.id !== subStatId),
+            }
+          }
+          return { player: { ...s.player, stats: newStats } }
+        })
+      },
+
       addPartyMember: (member) => {
         set(s => ({
           partyMembers: [...s.partyMembers.filter(m => m.id !== member.id), member],
@@ -376,9 +429,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       checkAndUnlockAchievements: () => {
-        const { player, quests, logs, achievements, titles, clearedDebuffCount } = get()
+        const { player, quests, logs, achievements, titles } = get()
         if (!player) return []
-        const newIds = checkAchievements(player, quests, logs, achievements, clearedDebuffCount)
+        const newIds = checkAchievements(player, quests, logs, achievements)
         if (newIds.length === 0) return []
 
         const now = new Date().toISOString()
@@ -393,7 +446,118 @@ export const useGameStore = create<GameStore>()(
         return newIds
       },
 
+      snapshotStatHistory: () => {
+        const { player } = get()
+        if (!player) return
+        const today = getTodayDate()
+        const existing = (player.statHistory ?? []).find(s => s.date === today)
+        if (existing) return
+        const snapshot: StatSnapshot = {
+          date: today,
+          stats: Object.fromEntries(ALL_STAT_KEYS.map(k => [k, player.stats[k].value])) as Record<StatKey, number>,
+          totalXP: player.totalXP,
+          level: player.level,
+          tier: player.tier,
+        }
+        set(s => ({
+          player: s.player ? {
+            ...s.player,
+            statHistory: [...(s.player.statHistory ?? []), snapshot].slice(-365),
+          } : null,
+        }))
+      },
+
       clearPendingLevelUp: () => set({ pendingLevelUp: null }),
+
+      migrateIfNeeded: () => {
+        const state = get()
+        if (state._migrated) return
+        if (!state.player) {
+          set({ _migrated: true })
+          return
+        }
+
+        const oldStats = state.player.stats as Record<string, StatBlock>
+        if (!('STR' in oldStats)) {
+          // Strip legacy activeDebuffs field if present
+          const { activeDebuffs: _removed, ...clean } = state.player as Player & { activeDebuffs?: unknown }
+          set({ _migrated: true, player: { ...clean, statHistory: state.player.statHistory ?? [] } })
+          return
+        }
+
+        const emptyBlock = (): StatBlock => ({ value: 1, subStats: [] })
+        const oldToNewStat: Record<string, StatKey> = {
+          STR: 'PHY', AGI: 'PHY', END: 'PHY', WIS: 'INT', INT: 'INT', CHA: 'CHA',
+        }
+
+        const newStats: Record<StatKey, StatBlock> = {
+          INT: {
+            value: oldStats['INT']?.value ?? 1,
+            subStats: [
+              ...(oldStats['INT']?.subStats ?? []).map((ss: SubStat) => ({
+                ...ss,
+                description: (ss as SubStat & { description?: string }).description ?? '',
+              })),
+              ...(oldStats['WIS']?.subStats ?? []).map((ss: SubStat) => ({
+                ...ss,
+                description: (ss as SubStat & { description?: string }).description ?? '',
+                parentStat: 'INT' as StatKey,
+              })),
+            ],
+          },
+          PHY: {
+            value: Math.max(
+              oldStats['STR']?.value ?? 1,
+              oldStats['AGI']?.value ?? 1,
+              oldStats['END']?.value ?? 1
+            ),
+            subStats: [
+              ...(oldStats['STR']?.subStats ?? []).map((ss: SubStat) => ({
+                ...ss,
+                description: (ss as SubStat & { description?: string }).description ?? '',
+                parentStat: 'PHY' as StatKey,
+              })),
+              ...(oldStats['AGI']?.subStats ?? []).map((ss: SubStat) => ({
+                ...ss,
+                description: (ss as SubStat & { description?: string }).description ?? '',
+                parentStat: 'PHY' as StatKey,
+              })),
+              ...(oldStats['END']?.subStats ?? []).map((ss: SubStat) => ({
+                ...ss,
+                description: (ss as SubStat & { description?: string }).description ?? '',
+                parentStat: 'PHY' as StatKey,
+              })),
+            ],
+          },
+          WLT: emptyBlock(),
+          CHA: {
+            value: oldStats['CHA']?.value ?? 1,
+            subStats: (oldStats['CHA']?.subStats ?? []).map((ss: SubStat) => ({
+              ...ss,
+              description: (ss as SubStat & { description?: string }).description ?? '',
+            })),
+          },
+          CRF: emptyBlock(),
+        }
+
+        const oldToNewQuestType: Record<string, Quest['type']> = {
+          daily: 'habit',
+          side: 'weekly',
+          main: 'yearly',
+        }
+
+        const { activeDebuffs: _removed, ...playerWithoutDebuffs } = state.player as Player & { activeDebuffs?: unknown }
+
+        set({
+          _migrated: true,
+          player: { ...playerWithoutDebuffs, stats: newStats, statHistory: state.player.statHistory ?? [] },
+          quests: state.quests.map(q => ({
+            ...q,
+            linkedStat: (oldToNewStat[q.linkedStat] ?? q.linkedStat) as StatKey,
+            type: (oldToNewQuestType[q.type] ?? q.type) as Quest['type'],
+          })),
+        })
+      },
 
       resetGame: () => {
         set({
@@ -404,7 +568,7 @@ export const useGameStore = create<GameStore>()(
           titles: DEFAULT_TITLES.map(t => ({ ...t })),
           partyMembers: [],
           pendingLevelUp: null,
-          clearedDebuffCount: 0,
+          _migrated: false,
         })
       },
 
@@ -421,13 +585,5 @@ export const useGameStore = create<GameStore>()(
           lastUpdated: new Date().toISOString(),
         }, null, 2)
       },
-    }),
-    {
-      name: 'lifegame_store',
-      storage: safeLocalStorage,
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true)
-      },
-    }
-  )
+  })
 )

@@ -1,4 +1,4 @@
-import { Tier, StatKey, Player, Achievement, Title, Quest, DailyLog } from './types'
+import { Tier, StatKey, Player, Achievement, Quest, DailyLog } from './types'
 
 export const TIER_ORDER: Tier[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'S+', 'X']
 
@@ -45,11 +45,10 @@ export function getTierGlow(tier: Tier): string {
 export function getStatColor(stat: StatKey): string {
   const map: Record<StatKey, string> = {
     INT: '#a855f7',
-    STR: '#ef4444',
-    AGI: '#22c55e',
-    END: '#f97316',
-    WIS: '#3b82f6',
+    PHY: '#ef4444',
+    WLT: '#fbbf24',
     CHA: '#ec4899',
+    CRF: '#22c55e',
   }
   return map[stat]
 }
@@ -57,16 +56,26 @@ export function getStatColor(stat: StatKey): string {
 export function getStatLabel(stat: StatKey): string {
   const map: Record<StatKey, string> = {
     INT: 'Intelligence',
-    STR: 'Strength',
-    AGI: 'Agility',
-    END: 'Endurance',
-    WIS: 'Wisdom',
+    PHY: 'Physical Prowess',
+    WLT: 'Wealth',
     CHA: 'Charisma',
+    CRF: 'Craft',
   }
   return map[stat]
 }
 
-export const ALL_STAT_KEYS: StatKey[] = ['INT', 'STR', 'AGI', 'END', 'WIS', 'CHA']
+export function getStatDescription(stat: StatKey): string {
+  const map: Record<StatKey, string> = {
+    INT: 'Academics, research, mathematics, quant finance, and deep study. The mind is a weapon.',
+    PHY: 'Gym, running, combat training, athletics, and physical conditioning. The body is the foundation.',
+    WLT: 'Trading, investing, income building, money management, and financial markets. Capital is power.',
+    CHA: 'Speaking, vocabulary, communication, posture, presence, and social confidence. Influence is earned.',
+    CRF: 'Coding, building software, writing, and creating things. Makers shape the world.',
+  }
+  return map[stat]
+}
+
+export const ALL_STAT_KEYS: StatKey[] = ['INT', 'PHY', 'WLT', 'CHA', 'CRF']
 
 export function getDaysActive(createdAt: string): number {
   const created = new Date(createdAt)
@@ -88,12 +97,30 @@ export function checkDailyStreak(logs: DailyLog[]): number {
   return streak
 }
 
+export function getStreakMultiplier(streak: number): number {
+  if (streak >= 30) return 1.5
+  if (streak >= 14) return 1.3
+  if (streak >= 7) return 1.2
+  if (streak >= 3) return 1.1
+  return 1.0
+}
+
+export function getQuestTypeXPMultiplier(type: Quest['type']): number {
+  const map: Record<Quest['type'], number> = {
+    habit: 1.0,
+    today: 1.0,
+    weekly: 1.2,
+    yearly: 1.5,
+    lifePurpose: 2.0,
+  }
+  return map[type] ?? 1.0
+}
+
 export function checkAchievements(
   player: Player,
   quests: Quest[],
   logs: DailyLog[],
   achievements: Achievement[],
-  clearedDebuffCount: number
 ): string[] {
   const newlyUnlocked: string[] = []
   for (const ach of achievements) {
@@ -109,9 +136,6 @@ export function checkAchievements(
         break
       case 'daily_streak':
         unlocked = checkDailyStreak(logs) >= condition.days
-        break
-      case 'debuff_cleared':
-        unlocked = clearedDebuffCount >= condition.count
         break
       case 'substat_value': {
         const all = ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats)

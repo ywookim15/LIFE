@@ -6,8 +6,8 @@ import { useNotification } from '@/contexts/NotificationContext'
 import SystemPanel from '@/components/ui/SystemPanel'
 import LogEditor from '@/components/log/LogEditor'
 import EvaluationResult from '@/components/log/EvaluationResult'
-import { AIEvaluation } from '@/lib/types'
-import { getTodayDate, formatDate } from '@/lib/gameLogic'
+import { AIEvaluation, DailyLog } from '@/lib/types'
+import { getTodayDate, formatDate, ALL_STAT_KEYS } from '@/lib/gameLogic'
 
 export default function LogPage() {
   const player = useGameStore(s => s.player)
@@ -17,6 +17,8 @@ export default function LogPage() {
   const { notify } = useNotification()
 
   const [currentLogId, setCurrentLogId] = useState<string | null>(null)
+  const [retryLoading, setRetryLoading] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
 
   if (!player) return null
 
@@ -32,20 +34,50 @@ export default function LogPage() {
 
     notify(`EVALUATION COMPLETE. +${evaluation.xpAwarded} XP AWARDED.`, 'success')
 
-    if (evaluation.debuffsApplied.length > 0) {
-      evaluation.debuffsApplied.forEach(d => {
-        notify(`DEBUFF APPLIED: ${d.name}. ${d.affectedStat} -${d.penalty}`, 'error')
-      })
-    }
-    if (evaluation.debuffsLifted.length > 0) {
-      notify(`${evaluation.debuffsLifted.length} DEBUFF(S) CLEARED.`, 'success')
-    }
-
     const unlocked = checkAchievements()
     unlocked.forEach(id => {
       const ach = useGameStore.getState().achievements.find(a => a.id === id)
       if (ach) notify(`ACHIEVEMENT UNLOCKED: ${ach.title}`, 'info')
     })
+  }
+
+  const runEvaluationForLog = async (log: DailyLog) => {
+    if (!player) return
+    setRetryLoading(true)
+    setRetryError(null)
+
+    const allSubStats = ALL_STAT_KEYS.flatMap(k =>
+      player.stats[k].subStats.map(ss => ({
+        id: ss.id, name: ss.name, value: ss.value, parentStat: ss.parentStat,
+      }))
+    )
+
+    try {
+      const res = await fetch('/api/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerStats: player.stats,
+          questList: 'No daily quests data available for retry.',
+          logContent: log.content,
+          subStats: allSubStats,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Evaluation failed')
+      const evaluation: AIEvaluation = {
+        xpAwarded: data.totalXP,
+        statBreakdown: data.statBreakdown,
+        subStatUpdates: data.subStatUpdates,
+        systemMessage: data.systemMessage,
+        evaluatedAt: new Date().toISOString(),
+      }
+      handleEvaluationComplete(log.id, evaluation)
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Evaluation failed. Check your GEMINI_API_KEY in .env.local.')
+    } finally {
+      setRetryLoading(false)
+    }
   }
 
   const displayLog = currentLogId
@@ -77,11 +109,38 @@ export default function LogPage() {
               <EvaluationResult log={displayLog} />
             </div>
           ) : todayLog && !todayLog.aiEvaluation ? (
-            <div className="py-4 text-center space-y-2">
+            <div className="space-y-3">
               <p className="font-orbitron text-[10px] text-[#fbbf24] tracking-wider uppercase animate-pulse">
                 Awaiting Evaluation
               </p>
-              <p className="text-xs text-[#64748b]">Log submitted. Evaluation not yet run.</p>
+              <div
+                className="p-3 text-[11px] text-[#64748b] leading-relaxed max-h-32 overflow-y-auto"
+                style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}
+              >
+                {todayLog.content}
+              </div>
+              {retryError && (
+                <div
+                  className="p-3 font-orbitron text-[10px] text-[#ef4444]"
+                  style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
+                >
+                  {retryError}
+                </div>
+              )}
+              <button
+                onClick={() => runEvaluationForLog(todayLog)}
+                disabled={retryLoading}
+                className="w-full py-2.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
+                style={{
+                  border: `1px solid ${retryLoading ? '#1e3a8a' : '#fbbf24'}`,
+                  borderRadius: '2px',
+                  background: retryLoading ? 'transparent' : 'rgba(251,191,36,0.1)',
+                  color: retryLoading ? '#374151' : '#fbbf24',
+                  cursor: retryLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {retryLoading ? 'Running Evaluation...' : 'Run Evaluation Now'}
+              </button>
             </div>
           ) : (
             <LogEditor onEvaluationComplete={handleEvaluationComplete} />

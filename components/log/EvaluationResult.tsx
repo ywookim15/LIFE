@@ -73,38 +73,50 @@ export default function EvaluationResult({ log }: EvaluationResultProps) {
           animated
         />
 
-        {/* Stat breakdown */}
+        {/* Stat breakdown with reasoning */}
         {eval_.statBreakdown.length > 0 && (
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-3 space-y-2.5">
             <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest mb-2">
               Stat Distribution
             </p>
             {eval_.statBreakdown
               .filter(sb => sb.xp > 0)
               .sort((a, b) => b.xp - a.xp)
-              .map(sb => {
+              .map((sb, i) => {
                 const color = getStatColor(sb.stat)
                 return (
-                  <div key={sb.stat} className="flex items-center gap-3">
-                    <span
-                      className="font-orbitron text-[10px] font-bold w-8 shrink-0"
-                      style={{ color }}
-                    >
-                      {sb.stat}
-                    </span>
-                    <div className="flex-1 h-[3px]" style={{ backgroundColor: '#1e3a8a', borderRadius: '2px' }}>
-                      <motion.div
-                        className="h-full rounded-full"
-                        style={{ backgroundColor: color }}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(sb.xp / eval_.xpAwarded) * 100}%` }}
-                        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 }}
-                      />
+                  <motion.div
+                    key={sb.stat}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4 + i * 0.07 }}
+                  >
+                    <div className="flex items-center gap-3 mb-0.5">
+                      <span
+                        className="font-orbitron text-[10px] font-bold w-8 shrink-0"
+                        style={{ color }}
+                      >
+                        {sb.stat}
+                      </span>
+                      <div className="flex-1 h-[3px]" style={{ backgroundColor: '#1e3a8a', borderRadius: '2px' }}>
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ backgroundColor: color }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(sb.xp / eval_.xpAwarded) * 100}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 + i * 0.07 }}
+                        />
+                      </div>
+                      <span className="font-orbitron text-[10px] text-[#93c5fd] w-8 text-right shrink-0">
+                        +{sb.xp}
+                      </span>
                     </div>
-                    <span className="font-orbitron text-[10px] text-[#93c5fd] w-8 text-right shrink-0">
-                      +{sb.xp}
-                    </span>
-                  </div>
+                    {sb.reasoning && (
+                      <p className="text-[10px] text-[#475569] italic pl-10 leading-tight">
+                        {sb.reasoning}
+                      </p>
+                    )}
+                  </motion.div>
                 )
               })}
           </div>
@@ -142,52 +154,6 @@ export default function EvaluationResult({ log }: EvaluationResultProps) {
               )
             })}
           </div>
-        </motion.div>
-      )}
-
-      {/* Debuffs applied */}
-      {eval_.debuffsApplied.length > 0 && (
-        <motion.div
-          className="p-3"
-          style={{
-            border: '1px solid #7f1d1d',
-            borderRadius: '2px',
-            backgroundColor: 'rgba(127, 29, 29, 0.08)',
-          }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-        >
-          <p className="font-orbitron text-[9px] text-[#ef4444] uppercase tracking-widest mb-2">
-            Debuffs Applied
-          </p>
-          {eval_.debuffsApplied.map(d => (
-            <div key={d.id} className="text-[11px] text-[#ef4444] mb-1">
-              ▼ {d.name}: {d.description}
-            </div>
-          ))}
-        </motion.div>
-      )}
-
-      {/* Debuffs lifted */}
-      {eval_.debuffsLifted.length > 0 && (
-        <motion.div
-          className="p-3"
-          style={{
-            border: '1px solid #064e3b',
-            borderRadius: '2px',
-            backgroundColor: 'rgba(6, 78, 59, 0.08)',
-          }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-        >
-          <p className="font-orbitron text-[9px] text-[#4fffb0] uppercase tracking-widest mb-1">
-            Debuffs Cleared
-          </p>
-          <p className="text-[11px] text-[#4fffb0]">
-            {eval_.debuffsLifted.length} debuff{eval_.debuffsLifted.length > 1 ? 's' : ''} removed.
-          </p>
         </motion.div>
       )}
     </motion.div>

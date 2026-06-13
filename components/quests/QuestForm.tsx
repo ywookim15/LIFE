@@ -3,25 +3,50 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
-import { StatKey } from '@/lib/types'
+import { StatKey, Quest } from '@/lib/types'
 import { ALL_STAT_KEYS, getStatColor, generateId } from '@/lib/gameLogic'
 
 interface QuestFormProps {
   onClose: () => void
-  defaultType?: 'daily' | 'side' | 'main'
+  defaultType?: Quest['type']
+  existingQuest?: Quest
 }
 
-export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormProps) {
+const TYPE_LABELS: Record<Quest['type'], string> = {
+  habit: 'HABIT',
+  today: 'TODAY',
+  weekly: 'WEEKLY',
+  yearly: 'YEARLY',
+  lifePurpose: 'PURPOSE',
+}
+
+const TYPE_COLORS: Record<Quest['type'], string> = {
+  habit: '#3b82f6',
+  today: '#a855f7',
+  weekly: '#f97316',
+  yearly: '#fbbf24',
+  lifePurpose: '#ec4899',
+}
+
+const ALL_TYPES: Quest['type'][] = ['habit', 'today', 'weekly', 'yearly', 'lifePurpose']
+
+export default function QuestForm({ onClose, defaultType = 'habit', existingQuest }: QuestFormProps) {
   const player = useGameStore(s => s.player)
   const addQuest = useGameStore(s => s.addQuest)
+  const updateQuest = useGameStore(s => s.updateQuest)
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [type, setType] = useState<'daily' | 'side' | 'main'>(defaultType)
-  const [linkedStat, setLinkedStat] = useState<StatKey>('INT')
-  const [linkedSubStats, setLinkedSubStats] = useState<string[]>([])
-  const [dueDate, setDueDate] = useState('')
-  const [milestones, setMilestones] = useState<string[]>([''])
+  const isEdit = !!existingQuest
+
+  const [title, setTitle] = useState(existingQuest?.title ?? '')
+  const [description, setDescription] = useState(existingQuest?.description ?? '')
+  const [type, setType] = useState<Quest['type']>(existingQuest?.type ?? defaultType)
+  const [linkedStat, setLinkedStat] = useState<StatKey>(existingQuest?.linkedStat ?? 'INT')
+  const [linkedSubStats, setLinkedSubStats] = useState<string[]>(existingQuest?.linkedSubStats ?? [])
+  const [dueDate, setDueDate] = useState(existingQuest?.dueDate ?? '')
+  const [milestones, setMilestones] = useState<string[]>(
+    existingQuest?.milestones?.map(m => m.title) ?? ['']
+  )
+  const [isRecurring, setIsRecurring] = useState(existingQuest?.isRecurring ?? true)
 
   const allSubStats = player
     ? ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats)
@@ -33,25 +58,34 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
     )
   }
 
+  const hasMilestones = type === 'yearly' || type === 'lifePurpose'
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
 
-    const questMilestones = type === 'main'
+    const questMilestones = hasMilestones
       ? milestones
           .filter(m => m.trim())
           .map(m => ({ id: generateId(), title: m.trim(), completed: false }))
       : undefined
 
-    addQuest({
+    const questData = {
       title: title.trim(),
       description: description.trim(),
       type,
       linkedStat,
       linkedSubStats,
-      dueDate: dueDate || undefined,
+      dueDate: (type !== 'habit' && type !== 'lifePurpose' && dueDate) ? dueDate : undefined,
       milestones: questMilestones,
-    })
+      isRecurring: type === 'habit' ? isRecurring : undefined,
+    }
+
+    if (isEdit && existingQuest) {
+      updateQuest(existingQuest.id, questData)
+    } else {
+      addQuest(questData)
+    }
     onClose()
   }
 
@@ -78,7 +112,7 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" style={{ boxShadow: '0 0 6px #3b82f6' }} />
               <span className="font-orbitron text-[10px] tracking-[0.2em] text-[#93c5fd] uppercase">
-                New Quest
+                {isEdit ? 'Edit Quest' : 'New Quest'}
               </span>
             </div>
             <button onClick={onClose} style={{ color: '#64748b' }}>
@@ -94,25 +128,56 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
               <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
                 Quest Type
               </label>
-              <div className="flex gap-2">
-                {(['daily', 'side', 'main'] as const).map(t => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setType(t)}
-                    className="flex-1 py-2 font-orbitron text-[10px] uppercase tracking-wider transition-all"
-                    style={{
-                      border: `1px solid ${type === t ? '#3b82f6' : '#1e3a8a'}`,
-                      borderRadius: '2px',
-                      backgroundColor: type === t ? 'rgba(59,130,246,0.2)' : 'transparent',
-                      color: type === t ? '#93c5fd' : '#64748b',
-                    }}
-                  >
-                    {t}
-                  </button>
-                ))}
+              <div className="grid grid-cols-5 gap-1.5">
+                {ALL_TYPES.map(t => {
+                  const tColor = TYPE_COLORS[t]
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setType(t)}
+                      className="py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
+                      style={{
+                        border: `1px solid ${type === t ? tColor : '#1e3a8a'}`,
+                        borderRadius: '2px',
+                        backgroundColor: type === t ? `${tColor}22` : 'transparent',
+                        color: type === t ? tColor : '#64748b',
+                      }}
+                    >
+                      {TYPE_LABELS[t]}
+                    </button>
+                  )
+                })}
               </div>
             </div>
+
+            {/* Auto-reset toggle for habit */}
+            {type === 'habit' && (
+              <div className="flex items-center justify-between">
+                <span className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest">
+                  Auto-Reset Daily
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsRecurring(v => !v)}
+                  className="relative w-10 h-5 transition-all"
+                  style={{
+                    borderRadius: '9999px',
+                    backgroundColor: isRecurring ? 'rgba(59,130,246,0.4)' : 'rgba(30,58,138,0.3)',
+                    border: `1px solid ${isRecurring ? '#3b82f6' : '#1e3a8a'}`,
+                  }}
+                >
+                  <span
+                    className="absolute top-0.5 w-4 h-4 transition-all"
+                    style={{
+                      borderRadius: '9999px',
+                      backgroundColor: isRecurring ? '#93c5fd' : '#374151',
+                      left: isRecurring ? 'calc(100% - 18px)' : '2px',
+                    }}
+                  />
+                </button>
+              </div>
+            )}
 
             {/* Title */}
             <div className="space-y-1.5">
@@ -148,7 +213,7 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
               <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
                 Linked Stat
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 {ALL_STAT_KEYS.map(stat => (
                   <button
                     key={stat}
@@ -195,8 +260,8 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
               </div>
             )}
 
-            {/* Due date (for side/main) */}
-            {type !== 'daily' && (
+            {/* Due date (for today, weekly, yearly — NOT habit or lifePurpose) */}
+            {(type === 'today' || type === 'weekly' || type === 'yearly') && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
                   Due Date (optional)
@@ -210,15 +275,18 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
               </div>
             )}
 
-            {/* Milestones (for main quests) */}
-            {type === 'main' && (
+            {/* Milestones (for yearly and lifePurpose) */}
+            {hasMilestones && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                  Milestones
+                  Milestones {type === 'lifePurpose' && <span className="text-[#ec4899] ml-1">(sequential)</span>}
                 </label>
                 <div className="space-y-2">
                   {milestones.map((m, i) => (
-                    <div key={i} className="flex gap-2">
+                    <div key={i} className="flex gap-2 items-center">
+                      {type === 'lifePurpose' && (
+                        <span className="font-orbitron text-[9px] text-[#ec4899] w-4 shrink-0 text-center">{i + 1}</span>
+                      )}
                       <input
                         type="text"
                         value={m}
@@ -271,7 +339,7 @@ export default function QuestForm({ onClose, defaultType = 'daily' }: QuestFormP
                   borderRadius: '2px',
                 }}
               >
-                CREATE QUEST
+                {isEdit ? 'UPDATE QUEST' : 'CREATE QUEST'}
               </button>
             </div>
           </form>

@@ -31,7 +31,6 @@ export default function AchievementsPage() {
       case 'quest_count': return `Complete ${condition.count} quest${condition.count > 1 ? 's' : ''}`
       case 'tier_reached': return `Reach tier ${condition.tier}`
       case 'daily_streak': return `${condition.days}-day log streak`
-      case 'debuff_cleared': return `Clear ${condition.count} debuff${condition.count > 1 ? 's' : ''}`
       case 'substat_value': return `Any sub-stat reaches ${condition.value}`
       case 'substat_count_above': return `${condition.count} sub-stats above ${condition.threshold}`
       case 'level_reached': return `Reach level ${condition.level}`
