@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { StatKey, Quest } from '@/lib/types'
-import { ALL_STAT_KEYS, getStatColor, generateId } from '@/lib/gameLogic'
+import { getStatColor, getStatLabel, generateId } from '@/lib/gameLogic'
 
 interface QuestFormProps {
   onClose: () => void
@@ -32,27 +32,34 @@ const ALL_TYPES: Quest['type'][] = ['habit', 'today', 'weekly', 'yearly', 'lifeP
 
 export default function QuestForm({ onClose, defaultType = 'habit', existingQuest }: QuestFormProps) {
   const player = useGameStore(s => s.player)
+  const statConfig = useGameStore(s => s.statConfig)
   const addQuest = useGameStore(s => s.addQuest)
   const updateQuest = useGameStore(s => s.updateQuest)
 
   const isEdit = !!existingQuest
 
+  const defaultStat = existingQuest?.linkedStat ?? statConfig[0]?.key ?? 'INT'
+
   const [title, setTitle] = useState(existingQuest?.title ?? '')
+  const [shortTitle, setShortTitle] = useState(existingQuest?.shortTitle ?? '')
   const [description, setDescription] = useState(existingQuest?.description ?? '')
   const [type, setType] = useState<Quest['type']>(existingQuest?.type ?? defaultType)
-  const [linkedStat, setLinkedStat] = useState<StatKey>(existingQuest?.linkedStat ?? 'INT')
+  const [linkedStat, setLinkedStat] = useState<StatKey>(defaultStat)
   const [linkedSubStats, setLinkedSubStats] = useState<string[]>(existingQuest?.linkedSubStats ?? [])
   const [dueDate, setDueDate] = useState(existingQuest?.dueDate ?? '')
   const [dueTime, setDueTime] = useState(existingQuest?.dueTime ?? '')
-  const [shortTitle, setShortTitle] = useState(existingQuest?.shortTitle ?? '')
   const [milestones, setMilestones] = useState<string[]>(
     existingQuest?.milestones?.map(m => m.title) ?? ['']
   )
   const [isRecurring, setIsRecurring] = useState(existingQuest?.isRecurring ?? true)
 
-  const allSubStats = player
-    ? ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats)
-    : []
+  // Only show subStats from the currently selected stat
+  const currentSubStats = player?.stats[linkedStat]?.subStats ?? []
+
+  const handleStatChange = (stat: StatKey) => {
+    setLinkedStat(stat)
+    setLinkedSubStats([]) // clear substat selection when stat changes
+  }
 
   const toggleSubStat = (id: string) => {
     setLinkedSubStats(prev =>
@@ -97,7 +104,7 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
     <AnimatePresence>
       <motion.div
         className="fixed inset-0 z-[80] flex items-center justify-center p-4"
-        style={{ backgroundColor: 'rgba(5, 7, 15, 0.9)' }}
+        style={{ backgroundColor: 'var(--overlay-bg)' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -142,10 +149,10 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
                       onClick={() => setType(t)}
                       className="py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
                       style={{
-                        border: `1px solid ${type === t ? tColor : '#1e3a8a'}`,
+                        border: `1px solid ${type === t ? tColor : 'var(--border-primary)'}`,
                         borderRadius: '2px',
                         backgroundColor: type === t ? `${tColor}22` : 'transparent',
-                        color: type === t ? tColor : '#64748b',
+                        color: type === t ? tColor : 'var(--text-muted)',
                       }}
                     >
                       {TYPE_LABELS[t]}
@@ -199,19 +206,19 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
             </div>
 
             {/* Short title for calendar */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                Calendar Label <span className="text-[#374151] normal-case">— max 15 chars, shown on calendar</span>
+                Calendar Label <span className="normal-case font-normal text-[#374151]">— max 15 chars</span>
               </label>
               <input
                 type="text"
                 value={shortTitle}
                 onChange={e => setShortTitle(e.target.value.slice(0, 15))}
                 className="input-system"
-                placeholder="Short label (optional)..."
+                placeholder="Short label for calendar (optional)"
                 maxLength={15}
               />
-              <p className="text-[9px] text-[#374151]">{shortTitle.length}/15</p>
+              <p className="font-orbitron text-[8px] text-[#374151]">{shortTitle.length}/15</p>
             </div>
 
             {/* Description */}
@@ -228,49 +235,53 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               />
             </div>
 
-            {/* Linked stat */}
+            {/* Linked stat — dynamic from statConfig */}
             <div className="space-y-1.5">
               <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                Linked Stat
+                Linked Skill
               </label>
-              <div className="grid grid-cols-5 gap-2">
-                {ALL_STAT_KEYS.map(stat => (
-                  <button
-                    key={stat}
-                    type="button"
-                    onClick={() => setLinkedStat(stat)}
-                    className="py-2 font-orbitron text-[11px] uppercase tracking-wider transition-all"
-                    style={{
-                      border: `1px solid ${linkedStat === stat ? getStatColor(stat) : '#1e3a8a'}`,
-                      borderRadius: '2px',
-                      backgroundColor: linkedStat === stat ? `${getStatColor(stat)}22` : 'transparent',
-                      color: linkedStat === stat ? getStatColor(stat) : '#64748b',
-                    }}
-                  >
-                    {stat}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-1.5">
+                {statConfig.map(cfg => {
+                  const color = getStatColor(cfg.key, statConfig)
+                  const selected = linkedStat === cfg.key
+                  return (
+                    <button
+                      key={cfg.key}
+                      type="button"
+                      onClick={() => handleStatChange(cfg.key)}
+                      className="py-1.5 px-3 font-orbitron text-[10px] uppercase tracking-wider transition-all"
+                      style={{
+                        border: `1px solid ${selected ? color : 'var(--border-primary)'}`,
+                        borderRadius: '2px',
+                        backgroundColor: selected ? `${color}22` : 'transparent',
+                        color: selected ? color : 'var(--text-muted)',
+                      }}
+                    >
+                      {getStatLabel(cfg.key, statConfig)}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Linked sub-stats */}
-            {allSubStats.length > 0 && (
+            {/* Linked sub-stats — filtered to selected stat only */}
+            {currentSubStats.length > 0 && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                  Linked Sub-Stats (optional)
+                  Linked Sub-Skills <span className="normal-case font-normal text-[#374151]">(optional)</span>
                 </label>
                 <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto pr-1">
-                  {allSubStats.map(ss => (
+                  {currentSubStats.map(ss => (
                     <button
                       key={ss.id}
                       type="button"
                       onClick={() => toggleSubStat(ss.id)}
                       className="text-left py-1.5 px-2 text-[10px] transition-all"
                       style={{
-                        border: `1px solid ${linkedSubStats.includes(ss.id) ? '#3b82f6' : '#1e3a8a'}`,
+                        border: `1px solid ${linkedSubStats.includes(ss.id) ? '#3b82f6' : 'var(--border-primary)'}`,
                         borderRadius: '2px',
                         backgroundColor: linkedSubStats.includes(ss.id) ? 'rgba(59,130,246,0.15)' : 'transparent',
-                        color: linkedSubStats.includes(ss.id) ? '#93c5fd' : '#64748b',
+                        color: linkedSubStats.includes(ss.id) ? '#93c5fd' : 'var(--text-muted)',
                       }}
                     >
                       {ss.name}
@@ -280,7 +291,7 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               </div>
             )}
 
-            {/* Due date + time (for today, weekly, yearly — NOT habit or lifePurpose) */}
+            {/* Due date + time */}
             {(type === 'today' || type === 'weekly' || type === 'yearly') && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
@@ -306,7 +317,7 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               </div>
             )}
 
-            {/* Milestones (for yearly and lifePurpose) */}
+            {/* Milestones */}
             {hasMilestones && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
@@ -357,9 +368,10 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2.5 font-orbitron text-[11px] uppercase tracking-wider transition-all"
                 disabled={!title.trim()}
                 style={{
+                  flex: 1,
+                  padding: '10px',
                   fontFamily: 'Orbitron, monospace',
                   fontSize: '11px',
                   letterSpacing: '0.1em',
@@ -368,6 +380,7 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
                   color: title.trim() ? '#93c5fd' : '#374151',
                   cursor: title.trim() ? 'pointer' : 'not-allowed',
                   borderRadius: '2px',
+                  textTransform: 'uppercase',
                 }}
               >
                 {isEdit ? 'UPDATE QUEST' : 'CREATE QUEST'}

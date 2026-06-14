@@ -42,7 +42,7 @@
   --scrollbar-thumb: #6080a0;
   --card-bg: rgba(150, 175, 200, 0.2);
   --card-bg-hover: rgba(130, 160, 190, 0.3);
-  --overlay-bg: rgba(100, 130, 160, 0.7);
+  --overlay-bg: rgba(5, 15, 30, 0.88);
 }
 
 @theme {

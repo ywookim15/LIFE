@@ -251,6 +251,17 @@ export default function CalendarPage() {
       map[ds].push(item)
     }
 
+    // Active daily habits — show on today only
+    for (const q of quests) {
+      if (q.type !== 'habit' || q.status !== 'active') continue
+      addItem(todayStr, {
+        id: q.id + '_habit',
+        label: '↺ ' + (q.shortTitle || (q.title.length > 10 ? q.title.slice(0, 9) + '…' : q.title)),
+        color: '#3b82f6',
+        type: 'quest',
+      })
+    }
+
     // Quests with due dates
     for (const q of quests) {
       if (!q.dueDate) continue
@@ -311,7 +322,7 @@ export default function CalendarPage() {
     }
 
     return map
-  }, [quests, calendarEvents])
+  }, [quests, calendarEvents, todayStr])
 
   const handleSaveEvent = (evData: Omit<CalendarEvent, 'id'>) => {
     addCalendarEvent(evData)
