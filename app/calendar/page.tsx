@@ -24,7 +24,8 @@ function inRange(dateStr: string, start: string, end: string) {
 
 type DayItem = {
   id: string
-  label: string    // shortTitle or truncated title
+  label: string    // shortTitle or truncated title (for calendar cell)
+  fullTitle: string  // full untruncated title (for detail panel)
   color: string
   type: 'quest' | 'event'
   isMultiDay?: boolean
@@ -196,7 +197,7 @@ function DayPopup({ dateStr, items, onClose, onDelete }: {
               <div className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ backgroundColor: item.color, boxShadow: `0 0 4px ${item.color}` }} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="font-orbitron text-xs text-[#e2e8f0] truncate">{item.label}</p>
+                  <p className="font-orbitron text-xs text-[#e2e8f0] truncate">{item.fullTitle}</p>
                   <span className="font-orbitron text-[8px] px-1 py-0.5 shrink-0" style={{ border: `1px solid ${item.color}44`, borderRadius: '2px', color: '#64748b' }}>
                     {item.type}
                   </span>
@@ -258,6 +259,7 @@ export default function CalendarPage() {
       addItem(ds, {
         id: q.id,
         label: q.shortTitle || (q.title.length > 13 ? q.title.slice(0, 12) + '…' : q.title),
+        fullTitle: q.title,
         color: '#fbbf24',
         type: 'quest',
         time: q.dueTime,
@@ -274,6 +276,7 @@ export default function CalendarPage() {
         addItem(start, {
           id: ev.id,
           label: ev.shortTitle || (ev.title.length > 13 ? ev.title.slice(0, 12) + '…' : ev.title),
+          fullTitle: ev.title,
           color: ev.color ?? '#3b82f6',
           type: 'event',
           time: ev.startTime ? `${ev.startTime}${ev.endTime ? ' – ' + ev.endTime : ''}` : undefined,
@@ -296,6 +299,7 @@ export default function CalendarPage() {
           addItem(ds, {
             id: ev.id + '_' + ds,
             label,
+            fullTitle: ev.title,
             color: ev.color ?? '#3b82f6',
             type: 'event',
             isMultiDay: true,
@@ -470,31 +474,75 @@ export default function CalendarPage() {
         </div>
       </SystemPanel>
 
-      {/* Clicked day quick actions */}
+      {/* Clicked day detail panel */}
       {clickedDate && !addingEvent && (
-        <SystemPanel title={`${clickedDate}`} delay={0}>
+        <SystemPanel title={clickedDate} delay={0}>
           <div className="p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="font-orbitron text-[10px] text-[#64748b]">
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <span className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-wider">
                 {(itemsByDate[clickedDate] ?? []).length} item{(itemsByDate[clickedDate] ?? []).length !== 1 ? 's' : ''}
               </span>
-              {(itemsByDate[clickedDate] ?? []).length > 0 && (
-                <button
-                  onClick={() => setPopupDate(clickedDate)}
-                  className="font-orbitron text-[9px] px-2 py-0.5"
-                  style={{ border: '1px solid #1e3a8a', borderRadius: '2px', color: '#64748b', cursor: 'pointer' }}
-                >
-                  View All
-                </button>
-              )}
               <button
                 onClick={() => setAddingEvent(true)}
-                className="font-orbitron text-[9px] px-2 py-0.5 ml-auto"
+                className="font-orbitron text-[9px] px-2 py-0.5"
                 style={{ border: '1px solid #3b82f6', borderRadius: '2px', color: '#93c5fd', cursor: 'pointer' }}
               >
                 + Add Event
               </button>
             </div>
+
+            {/* Item list */}
+            {(itemsByDate[clickedDate] ?? []).length === 0 ? (
+              <p className="font-orbitron text-[10px] text-[#374151] italic py-2 text-center">
+                Nothing scheduled
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {(itemsByDate[clickedDate] ?? []).map(item => (
+                  <div
+                    key={item.id}
+                    className="flex items-start gap-2 p-2"
+                    style={{
+                      backgroundColor: item.color + '14',
+                      borderLeft: `3px solid ${item.color}`,
+                      borderRadius: '2px',
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-orbitron text-[11px] font-semibold" style={{ color: item.color }}>
+                          {item.fullTitle}
+                        </p>
+                        {item.isMultiDay && (
+                          <span className="font-orbitron text-[7px] px-1 py-0.5 shrink-0" style={{ border: `1px solid ${item.color}55`, borderRadius: '2px', color: '#64748b' }}>
+                            multi-day
+                          </span>
+                        )}
+                        <span className="font-orbitron text-[7px] px-1 py-0.5 shrink-0" style={{ border: `1px solid ${item.color}44`, borderRadius: '2px', color: '#64748b' }}>
+                          {item.type}
+                        </span>
+                      </div>
+                      {item.time && (
+                        <p className="font-orbitron text-[9px] text-[#64748b] mt-0.5">⏱ {item.time}</p>
+                      )}
+                      {item.description && (
+                        <p className="text-[10px] text-[#475569] italic mt-0.5">{item.description}</p>
+                      )}
+                    </div>
+                    {item.type === 'event' && (
+                      <button
+                        onClick={() => handleDelete(item.id, 'event')}
+                        className="shrink-0 font-orbitron text-[9px] px-1.5 py-0.5 transition-colors hover:text-[#ef4444]"
+                        style={{ border: '1px solid #1e3a8a', borderRadius: '2px', color: '#374151', cursor: 'pointer' }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </SystemPanel>
       )}
