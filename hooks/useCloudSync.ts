@@ -16,12 +16,18 @@ export function useCloudSync() {
       const state = useGameStore.getState()
       if (!state._hasHydrated) return
 
-      const { player, quests, logs, achievements, titles, partyMembers, _migrated } = state
+      const {
+        player, quests, logs, achievements, titles, partyMembers, _migrated,
+        workoutPlans, workoutLogs, calendarEvents, manualPRs, statConfig,
+      } = state
 
       await supabase.from('player_data').upsert(
         {
           user_id: user.id,
-          data: { player, quests, logs, achievements, titles, partyMembers, _migrated },
+          data: {
+            player, quests, logs, achievements, titles, partyMembers, _migrated,
+            workoutPlans, workoutLogs, calendarEvents, manualPRs, statConfig,
+          },
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }
