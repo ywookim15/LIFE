@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react'
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 import { useCloudSync } from '@/hooks/useCloudSync'
 import SystemNotification from '@/components/ui/SystemNotification'
 import LevelUpModal from '@/components/ui/LevelUpModal'
@@ -47,11 +48,13 @@ function GameWrapper({ children }: { children: ReactNode }) {
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <GameWrapper>{children}</GameWrapper>
-        <SystemNotification />
-      </NotificationProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <GameWrapper>{children}</GameWrapper>
+          <SystemNotification />
+        </NotificationProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

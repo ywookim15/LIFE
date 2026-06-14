@@ -10,11 +10,11 @@ import MuscleRadar from '@/components/body/MuscleRadar'
 import WorkoutCalendar from '@/components/body/WorkoutCalendar'
 import ExerciseProgressChart from '@/components/body/ExerciseProgressChart'
 import {
-  MuscleGroup, ALL_MUSCLES, WorkoutLog, PlanExercise, LoggedExercise,
+  MuscleGroup, ALL_MUSCLES, WorkoutLog, PlanExercise, LoggedExercise, ManualPR,
 } from '@/lib/types'
 import { generateId, getTodayDate } from '@/lib/gameLogic'
 
-type Tab = 'overview' | 'plans' | 'log' | 'progress'
+type Tab = 'overview' | 'plans' | 'log' | 'progress' | 'records'
 
 const MUSCLE_LABEL: Record<MuscleGroup, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Shoulders', biceps: 'Biceps',
@@ -461,6 +461,9 @@ export default function BodyPage() {
   const player = useGameStore(s => s.player)
   const workoutLogs = useGameStore(s => s.workoutLogs)
   const workoutPlans = useGameStore(s => s.workoutPlans)
+  const manualPRs = useGameStore(s => s.manualPRs)
+  const addManualPR = useGameStore(s => s.addManualPR)
+  const deleteManualPR = useGameStore(s => s.deleteManualPR)
   const deleteWorkoutPlan = useGameStore(s => s.deleteWorkoutPlan)
   const deleteWorkoutLog = useGameStore(s => s.deleteWorkoutLog)
   const { notify } = useNotification()
@@ -469,6 +472,12 @@ export default function BodyPage() {
   const [creatingPlan, setCreatingPlan] = useState(false)
   const [loggingWorkout, setLoggingWorkout] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
+  const [addingPR, setAddingPR] = useState(false)
+  const [prExName, setPrExName] = useState('')
+  const [prWeight, setPrWeight] = useState(0)
+  const [prReps, setPrReps] = useState(1)
+  const [prNotes, setPrNotes] = useState('')
+  const [prDate, setPrDate] = useState(getTodayDate())
 
   const now = new Date()
   const [calYear] = useState(now.getFullYear())
@@ -478,6 +487,42 @@ export default function BodyPage() {
     const result = {} as Record<MuscleGroup, number>
     for (const m of ALL_MUSCLES) result[m] = getMusclesoreness(m, workoutLogs)
     return result
+  }, [workoutLogs])
+
+  const volumeStats = useMemo(() => {
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    const weekStr = weekAgo.toISOString().slice(0, 10)
+    let totalVol = 0
+    let weekVol = 0
+    for (const log of workoutLogs) {
+      let logVol = 0
+      for (const ex of log.exercises) {
+        for (const s of ex.sets) logVol += s.weight * s.reps
+      }
+      totalVol += logVol
+      if (log.date >= weekStr) weekVol += logVol
+    }
+    const perWorkout = workoutLogs.length > 0 ? Math.round(totalVol / workoutLogs.length) : 0
+    return { totalVol: Math.round(totalVol), weekVol: Math.round(weekVol), perWorkout }
+  }, [workoutLogs])
+
+  const sessionMaxPRs = useMemo(() => {
+    const byExercise: Record<string, { date: string; weight: number; reps: number; est1RM: number }[]> = {}
+    for (const log of workoutLogs) {
+      for (const ex of log.exercises) {
+        const best = ex.sets.reduce<{ weight: number; reps: number; est1RM: number }>(
+          (b, s) => {
+            const est = s.weight * (1 + s.reps / 30)
+            return est > b.est1RM ? { weight: s.weight, reps: s.reps, est1RM: est } : b
+          },
+          { weight: 0, reps: 0, est1RM: 0 }
+        )
+        if (!byExercise[ex.name]) byExercise[ex.name] = []
+        byExercise[ex.name].push({ date: log.date, ...best })
+      }
+    }
+    return byExercise
   }, [workoutLogs])
 
   // All unique exercise names across all logs
@@ -494,6 +539,7 @@ export default function BodyPage() {
     { id: 'plans', label: 'Plans' },
     { id: 'log', label: 'Log' },
     { id: 'progress', label: 'Progress' },
+    { id: 'records', label: 'Records' },
   ]
 
   return (
@@ -559,6 +605,26 @@ export default function BodyPage() {
               </div>
             </SystemPanel>
           </div>
+
+          {/* Volume stats */}
+          <SystemPanel title="Volume Stats" delay={0.08}>
+            <div className="p-3 grid grid-cols-3 gap-2">
+              {[
+                { label: 'Total Volume', value: `${volumeStats.totalVol.toLocaleString()} lbs` },
+                { label: 'This Week', value: `${volumeStats.weekVol.toLocaleString()} lbs` },
+                { label: 'Avg / Session', value: `${volumeStats.perWorkout.toLocaleString()} lbs` },
+              ].map(stat => (
+                <div
+                  key={stat.label}
+                  className="text-center p-3"
+                  style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(239,68,68,0.05)' }}
+                >
+                  <p className="font-orbitron text-sm font-bold text-[#ef4444]">{stat.value}</p>
+                  <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-widest mt-0.5">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </SystemPanel>
 
           {/* Soreness status grid */}
           <SystemPanel title="Muscle Status" delay={0.1}>
@@ -714,6 +780,128 @@ export default function BodyPage() {
               </div>
             </SystemPanel>
           )}
+        </div>
+      )}
+
+      {/* ── RECORDS ────────────────────────────────────────────── */}
+      {tab === 'records' && (
+        <div className="space-y-4">
+          {/* Session max PRs */}
+          <SystemPanel title="Best PR Per Exercise" delay={0}>
+            <div className="divide-y divide-[#1e3a8a]">
+              {Object.keys(sessionMaxPRs).length === 0 ? (
+                <div className="p-6 text-center">
+                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">Log workouts to see PRs</p>
+                </div>
+              ) : (
+                Object.entries(sessionMaxPRs).map(([exName, sessions]) => {
+                  const best = sessions.reduce((b, s) => s.est1RM > b.est1RM ? s : b, sessions[0])
+                  return (
+                    <div key={exName} className="p-3 flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="font-orbitron text-xs text-[#e2e8f0]">{exName}</p>
+                        <p className="font-orbitron text-[8px] text-[#64748b] mt-0.5">{best.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-orbitron text-xs text-[#ef4444]">{best.weight} lbs × {best.reps}</p>
+                        <p className="font-orbitron text-[8px] text-[#64748b]">{Math.round(best.est1RM)} est. 1RM</p>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </SystemPanel>
+
+          {/* Manual PRs */}
+          <SystemPanel title="Manual PRs" delay={0.1}>
+            <div className="divide-y divide-[#1e3a8a]">
+              {manualPRs.length === 0 && !addingPR && (
+                <div className="p-4 text-center">
+                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">No manual PRs added</p>
+                </div>
+              )}
+              {manualPRs
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map(pr => (
+                  <div key={pr.id} className="p-3 flex items-center gap-3">
+                    <div className="flex-1">
+                      <p className="font-orbitron text-xs text-[#e2e8f0]">{pr.exerciseName}</p>
+                      <p className="font-orbitron text-[8px] text-[#64748b] mt-0.5">{pr.date}</p>
+                      {pr.notes && <p className="text-[10px] text-[#475569] italic mt-0.5">{pr.notes}</p>}
+                    </div>
+                    <div className="text-right mr-2">
+                      <p className="font-orbitron text-xs text-[#ef4444]">{pr.weight} lbs × {pr.reps}</p>
+                      <p className="font-orbitron text-[8px] text-[#64748b]">{Math.round(pr.weight * (1 + pr.reps / 30))} est. 1RM</p>
+                    </div>
+                    <button
+                      onClick={() => { deleteManualPR(pr.id); notify('PR deleted.', 'error') }}
+                      className="font-orbitron text-[8px] text-[#374151] px-1.5 py-0.5 hover:text-[#ef4444] transition-colors shrink-0"
+                      style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}
+                    >×</button>
+                  </div>
+                ))
+              }
+
+              {addingPR ? (
+                <div className="p-4 space-y-3">
+                  <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Add Manual PR</p>
+                  <input
+                    className="input-system w-full"
+                    placeholder="Exercise name"
+                    value={prExName}
+                    onChange={e => setPrExName(e.target.value)}
+                    maxLength={64}
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block mb-1">Weight (lbs)</label>
+                      <input type="number" min={0} className="input-system text-center" value={prWeight} onChange={e => setPrWeight(Number(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block mb-1">Reps</label>
+                      <input type="number" min={1} className="input-system text-center" value={prReps} onChange={e => setPrReps(Number(e.target.value))} />
+                    </div>
+                    <div>
+                      <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block mb-1">Date</label>
+                      <input type="date" className="input-system text-xs" value={prDate} onChange={e => setPrDate(e.target.value)} />
+                    </div>
+                  </div>
+                  <input
+                    className="input-system w-full"
+                    placeholder="Notes (optional)"
+                    value={prNotes}
+                    onChange={e => setPrNotes(e.target.value)}
+                    maxLength={120}
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => setAddingPR(false)} className="btn-system flex-1 py-2 font-orbitron text-[9px]">Cancel</button>
+                    <button
+                      onClick={() => {
+                        if (!prExName.trim()) return
+                        addManualPR({ exerciseName: prExName.trim(), weight: prWeight, reps: prReps, notes: prNotes.trim() || undefined, date: prDate })
+                        notify('PR ADDED.', 'success')
+                        setPrExName(''); setPrWeight(0); setPrReps(1); setPrNotes(''); setPrDate(getTodayDate())
+                        setAddingPR(false)
+                      }}
+                      disabled={!prExName.trim()}
+                      className="flex-1 py-2 font-orbitron text-[9px] uppercase tracking-wider"
+                      style={{ border: '1px solid #ef4444', borderRadius: '2px', backgroundColor: 'rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer', opacity: prExName.trim() ? 1 : 0.4 }}
+                    >Save PR</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3">
+                  <button
+                    onClick={() => setAddingPR(true)}
+                    className="w-full py-2 font-orbitron text-[9px] uppercase tracking-wider"
+                    style={{ border: '1px dashed #7f1d1d', borderRadius: '2px', color: '#ef4444', cursor: 'pointer' }}
+                  >+ Add Manual PR</button>
+                </div>
+              )}
+            </div>
+          </SystemPanel>
         </div>
       )}
 

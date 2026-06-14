@@ -5,6 +5,7 @@ import CharacterCard from '@/components/dashboard/CharacterCard'
 import StatGrid from '@/components/dashboard/StatGrid'
 import SystemPanel from '@/components/ui/SystemPanel'
 import { getTodayDate } from '@/lib/gameLogic'
+import { getDailyQuote } from '@/lib/quotes'
 
 export default function DashboardPage() {
   const player = useGameStore(s => s.player)
@@ -78,6 +79,22 @@ export default function DashboardPage() {
         {/* Right column */}
         <div className="space-y-4">
           <StatGrid />
+
+          <SystemPanel title="Quote of the Day" delay={0.25}>
+            {(() => {
+              const quote = getDailyQuote()
+              return (
+                <div className="p-4">
+                  <p className="text-sm text-[#e2e8f0] leading-relaxed italic">
+                    &ldquo;{quote.text}&rdquo;
+                  </p>
+                  <p className="mt-2 font-orbitron text-[10px] text-[#64748b] tracking-wider">
+                    — {quote.author}
+                  </p>
+                </div>
+              )
+            })()}
+          </SystemPanel>
 
           <SystemPanel title="System Log" delay={0.3}>
             <div className="p-3">

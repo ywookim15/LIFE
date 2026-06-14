@@ -1,4 +1,5 @@
-import { Tier, StatKey, Player, Achievement, Quest, DailyLog } from './types'
+import { Tier, StatKey, Player, Achievement, Quest, DailyLog, StatConfig } from './types'
+import { DEFAULT_STAT_CONFIG } from './defaultData'
 
 export const TIER_ORDER: Tier[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'S+', 'X']
 
@@ -22,15 +23,8 @@ export function getTierIndex(tier: Tier): number {
 
 export function getTierColor(tier: Tier): string {
   const map: Record<Tier, string> = {
-    F: '#94a3b8',
-    E: '#22c55e',
-    D: '#3b82f6',
-    C: '#a855f7',
-    B: '#f97316',
-    A: '#ef4444',
-    S: '#fbbf24',
-    'S+': '#fde047',
-    X: '#ffffff',
+    F: '#94a3b8', E: '#22c55e', D: '#3b82f6', C: '#a855f7',
+    B: '#f97316', A: '#ef4444', S: '#fbbf24', 'S+': '#fde047', X: '#ffffff',
   }
   return map[tier]
 }
@@ -42,37 +36,36 @@ export function getTierGlow(tier: Tier): string {
   return 'none'
 }
 
-export function getStatColor(stat: StatKey): string {
-  const map: Record<StatKey, string> = {
-    INT: '#a855f7',
-    PHY: '#ef4444',
-    WLT: '#fbbf24',
-    CHA: '#ec4899',
-    CRF: '#22c55e',
-  }
-  return map[stat]
+// Default colors for the 5 original stats (used as fallback)
+const DEFAULT_COLORS: Record<string, string> = {
+  INT: '#a855f7', PHY: '#ef4444', WLT: '#fbbf24', CHA: '#ec4899', CRF: '#22c55e',
 }
 
-export function getStatLabel(stat: StatKey): string {
-  const map: Record<StatKey, string> = {
-    INT: 'Intelligence',
-    PHY: 'Physical Prowess',
-    WLT: 'Wealth',
-    CHA: 'Charisma',
-    CRF: 'Craft',
-  }
-  return map[stat]
+export function getStatColor(stat: StatKey, config?: StatConfig[]): string {
+  const cfg = (config ?? DEFAULT_STAT_CONFIG).find(c => c.key === stat)
+  return cfg?.color ?? DEFAULT_COLORS[stat] ?? '#64748b'
 }
 
-export function getStatDescription(stat: StatKey): string {
-  const map: Record<StatKey, string> = {
-    INT: 'Academics, research, mathematics, quant finance, and deep study. The mind is a weapon.',
-    PHY: 'Gym, running, combat training, athletics, and physical conditioning. The body is the foundation.',
-    WLT: 'Trading, investing, income building, money management, and financial markets. Capital is power.',
-    CHA: 'Speaking, vocabulary, communication, posture, presence, and social confidence. Influence is earned.',
-    CRF: 'Coding, building software, writing, and creating things. Makers shape the world.',
+export function getStatLabel(stat: StatKey, config?: StatConfig[]): string {
+  const cfg = (config ?? DEFAULT_STAT_CONFIG).find(c => c.key === stat)
+  if (cfg) return cfg.label
+  const defaults: Record<string, string> = {
+    INT: 'Intelligence', PHY: 'Physical Prowess', WLT: 'Wealth', CHA: 'Charisma', CRF: 'Craft',
   }
-  return map[stat]
+  return defaults[stat] ?? stat
+}
+
+export function getStatDescription(stat: StatKey, config?: StatConfig[]): string {
+  const cfg = (config ?? DEFAULT_STAT_CONFIG).find(c => c.key === stat)
+  if (cfg) return cfg.description
+  const defaults: Record<string, string> = {
+    INT: 'Academics, research, mathematics, quant finance, and deep study.',
+    PHY: 'Gym, running, combat training, athletics, and physical conditioning.',
+    WLT: 'Trading, investing, income building, money management, and financial markets.',
+    CHA: 'Speaking, vocabulary, communication, posture, presence, and social confidence.',
+    CRF: 'Coding, building software, writing, and creating things.',
+  }
+  return defaults[stat] ?? ''
 }
 
 export const ALL_STAT_KEYS: StatKey[] = ['INT', 'PHY', 'WLT', 'CHA', 'CRF']
@@ -107,11 +100,7 @@ export function getStreakMultiplier(streak: number): number {
 
 export function getQuestTypeXPMultiplier(type: Quest['type']): number {
   const map: Record<Quest['type'], number> = {
-    habit: 1.0,
-    today: 1.0,
-    weekly: 1.2,
-    yearly: 1.5,
-    lifePurpose: 2.0,
+    habit: 1.0, today: 1.0, weekly: 1.2, yearly: 1.5, lifePurpose: 2.0,
   }
   return map[type] ?? 1.0
 }
@@ -138,12 +127,12 @@ export function checkAchievements(
         unlocked = checkDailyStreak(logs) >= condition.days
         break
       case 'substat_value': {
-        const all = ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats)
+        const all = Object.values(player.stats).flatMap(b => b.subStats)
         unlocked = all.some(ss => ss.value >= condition.value)
         break
       }
       case 'substat_count_above': {
-        const all = ALL_STAT_KEYS.flatMap(k => player.stats[k].subStats)
+        const all = Object.values(player.stats).flatMap(b => b.subStats)
         unlocked = all.filter(ss => ss.value >= condition.threshold).length >= condition.count
         break
       }

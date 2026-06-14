@@ -1,21 +1,28 @@
+export type StatKey = string
 export type Tier = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+' | 'X'
-export type StatKey = 'INT' | 'PHY' | 'WLT' | 'CHA' | 'CRF'
+
+export interface StatConfig {
+  key: string
+  label: string
+  description: string
+  color: string
+}
 
 export interface SubStat {
   id: string
   name: string
   description: string
-  value: number // 1-100
+  value: number
   parentStat: StatKey
 }
 
 export interface StatBlock {
-  value: number // 1-999
+  value: number
   subStats: SubStat[]
 }
 
 export interface StatSnapshot {
-  date: string // YYYY-MM-DD
+  date: string
   stats: Record<StatKey, number>
   totalXP: number
   level: number
@@ -27,7 +34,7 @@ export interface Player {
   name: string
   title: string
   tier: Tier
-  level: number // 1-100 within tier
+  level: number
   xp: number
   xpToNext: number
   totalXP: number
@@ -63,7 +70,7 @@ export interface Milestone {
 
 export interface DailyLog {
   id: string
-  date: string // YYYY-MM-DD
+  date: string
   content: string
   questsCompleted: string[]
   aiEvaluation?: AIEvaluation
@@ -121,6 +128,23 @@ export interface LevelUpData {
   tieredUp: boolean
 }
 
+export interface CalendarEvent {
+  id: string
+  title: string
+  date: string // YYYY-MM-DD
+  description?: string
+  color?: string
+}
+
+export interface ManualPR {
+  id: string
+  exerciseName: string
+  weight: number
+  reps: number
+  notes?: string
+  date: string // YYYY-MM-DD
+}
+
 // ─── Workout / Body System ─────────────────────────────────────────────────
 
 export type MuscleGroup =
@@ -134,7 +158,7 @@ export const ALL_MUSCLES: MuscleGroup[] = [
 
 export interface LoggedSet {
   reps: number
-  weight: number // lbs
+  weight: number
 }
 
 export interface LoggedExercise {
@@ -145,7 +169,7 @@ export interface LoggedExercise {
 
 export interface WorkoutLog {
   id: string
-  date: string // YYYY-MM-DD
+  date: string
   planId?: string
   planName?: string
   exercises: LoggedExercise[]

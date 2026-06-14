@@ -2,27 +2,27 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { StatKey, SubStat } from '@/lib/types'
+import { SubStat, StatConfig } from '@/lib/types'
 import { useGameStore } from '@/lib/store'
 import { getStatColor, getStatLabel } from '@/lib/gameLogic'
 import AddSubStatForm from './AddSubStatForm'
 
 interface SubStatListProps {
-  stat: StatKey
+  stat: string
+  statConfig?: StatConfig[]
   alwaysExpanded?: boolean
 }
 
 interface EditFormProps {
   subStat: SubStat
   color: string
-  onSave: (updates: Partial<Pick<SubStat, 'name' | 'description' | 'value'>>) => void
+  onSave: (updates: Partial<Pick<SubStat, 'name' | 'description'>>) => void
   onCancel: () => void
 }
 
 function EditSubStatForm({ subStat, color, onSave, onCancel }: EditFormProps) {
   const [name, setName] = useState(subStat.name)
   const [description, setDescription] = useState(subStat.description)
-  const [value, setValue] = useState(subStat.value)
 
   return (
     <div
@@ -46,24 +46,9 @@ function EditSubStatForm({ subStat, color, onSave, onCancel }: EditFormProps) {
         placeholder="What does this skill involve?"
         maxLength={120}
       />
-      <div className="space-y-1">
-        <div className="flex justify-between">
-          <span className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-wider">Value</span>
-          <span className="font-orbitron text-[10px]" style={{ color }}>{value}</span>
-        </div>
-        <input
-          type="range"
-          min={1}
-          max={100}
-          value={value}
-          onChange={e => setValue(Number(e.target.value))}
-          className="w-full"
-          style={{ accentColor: color }}
-        />
-      </div>
       <div className="flex gap-2">
         <button
-          onClick={() => onSave({ name: name.trim() || subStat.name, description: description.trim(), value })}
+          onClick={() => onSave({ name: name.trim() || subStat.name, description: description.trim() })}
           className="flex-1 py-1 font-orbitron text-[9px] uppercase tracking-wider transition-all"
           style={{
             background: 'rgba(6, 95, 70, 0.3)',
@@ -123,7 +108,7 @@ function DeleteConfirm({ name, onConfirm, onCancel }: DeleteConfirmProps) {
   )
 }
 
-export default function SubStatList({ stat, alwaysExpanded = false }: SubStatListProps) {
+export default function SubStatList({ stat, statConfig, alwaysExpanded = false }: SubStatListProps) {
   const player = useGameStore(s => s.player)
   const updateSubStat = useGameStore(s => s.updateSubStat)
   const deleteSubStat = useGameStore(s => s.deleteSubStat)
@@ -135,7 +120,10 @@ export default function SubStatList({ stat, alwaysExpanded = false }: SubStatLis
   if (!player) return null
 
   const block = player.stats[stat]
-  const color = getStatColor(stat)
+  if (!block) return null
+  const color = getStatColor(stat, statConfig)
+
+  const maxVal = Math.max(1, ...block.subStats.map(ss => ss.value))
 
   return (
     <div
@@ -155,9 +143,8 @@ export default function SubStatList({ stat, alwaysExpanded = false }: SubStatLis
       >
         <div className="flex items-center gap-3">
           <span className="font-orbitron text-sm font-bold" style={{ color }}>
-            {stat}
+            {getStatLabel(stat, statConfig)}
           </span>
-          <span className="text-[11px] text-[#64748b]">{getStatLabel(stat)}</span>
           <span
             className="font-orbitron text-[9px] px-1.5 py-0.5"
             style={{ border: `1px solid ${color}44`, borderRadius: '2px', color: '#64748b' }}
@@ -223,6 +210,7 @@ export default function SubStatList({ stat, alwaysExpanded = false }: SubStatLis
                           />
                         )
                       }
+                      const barPct = (ss.value / maxVal) * 100
                       return (
                         <div key={ss.id} className="space-y-1">
                           <div className="flex items-center justify-between">
@@ -230,7 +218,7 @@ export default function SubStatList({ stat, alwaysExpanded = false }: SubStatLis
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] text-[#94a3b8]">{ss.name}</span>
                                 <span className="font-orbitron text-[10px] text-[#93c5fd] shrink-0">
-                                  {ss.value}<span className="text-[#374151]">/100</span>
+                                  {ss.value}
                                 </span>
                               </div>
                               {ss.description && (
@@ -268,7 +256,7 @@ export default function SubStatList({ stat, alwaysExpanded = false }: SubStatLis
                               className="h-full rounded-full"
                               style={{ backgroundColor: color }}
                               initial={{ width: 0 }}
-                              animate={{ width: `${ss.value}%` }}
+                              animate={{ width: `${barPct}%` }}
                               transition={{ duration: 0.8, ease: 'easeOut' }}
                             />
                           </div>

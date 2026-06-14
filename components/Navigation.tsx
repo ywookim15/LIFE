@@ -65,6 +65,18 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/calendar',
+    label: 'Calendar',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <line x1="3" y1="9" x2="21" y2="9" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+      </svg>
+    ),
+  },
+  {
     href: '/log',
     label: 'Log',
     icon: (
@@ -72,18 +84,6 @@ const NAV_ITEMS = [
         <path d="M4 6h16M4 10h16M4 14h10M4 18h6" />
         <circle cx="19" cy="17" r="3" />
         <path d="M21 19l2 2" />
-      </svg>
-    ),
-  },
-  {
-    href: '/party',
-    label: 'Party',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <circle cx="9" cy="7" r="3" />
-        <path d="M3 20v-2a6 6 0 016-6" />
-        <circle cx="17" cy="8" r="2.5" />
-        <path d="M20 20v-1.5a5 5 0 00-5-5" />
       </svg>
     ),
   },

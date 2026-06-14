@@ -4,18 +4,26 @@ import { useState } from 'react'
 import { useGameStore } from '@/lib/store'
 import { useNotification } from '@/contexts/NotificationContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import SystemPanel from '@/components/ui/SystemPanel'
 import TierBadge from '@/components/ui/TierBadge'
 import { getDaysActive } from '@/lib/gameLogic'
+import { STAT_PALETTE } from '@/lib/defaultData'
+import type { StatConfig } from '@/lib/types'
 
 export default function SettingsPage() {
   const player = useGameStore(s => s.player)
+  const statConfig = useGameStore(s => s.statConfig)
   const updatePlayerName = useGameStore(s => s.updatePlayerName)
   const resetGame = useGameStore(s => s.resetGame)
+  const addStat = useGameStore(s => s.addStat)
+  const deleteStat = useGameStore(s => s.deleteStat)
+  const updateStatConfig = useGameStore(s => s.updateStatConfig)
   const logs = useGameStore(s => s.logs)
   const quests = useGameStore(s => s.quests)
   const { notify } = useNotification()
   const { user, signOut, deleteAccount } = useAuth()
+  const { isDark, toggleTheme } = useTheme()
 
   const [newName, setNewName] = useState(player?.name || '')
   const [confirmReset, setConfirmReset] = useState(false)
@@ -24,6 +32,16 @@ export default function SettingsPage() {
   const [deleteText, setDeleteText] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [signOutLoading, setSignOutLoading] = useState(false)
+
+  // Skills management state
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editColor, setEditColor] = useState('')
+  const [newStatLabel, setNewStatLabel] = useState('')
+  const [newStatDesc, setNewStatDesc] = useState('')
+  const [newStatColor, setNewStatColor] = useState(STAT_PALETTE[0])
+  const [confirmDeleteStat, setConfirmDeleteStat] = useState<string | null>(null)
 
   if (!player) return null
 
@@ -37,7 +55,9 @@ export default function SettingsPage() {
   const handleReset = () => {
     if (confirmText !== 'RESET') return
     resetGame()
-    notify('SYSTEM RESET. All data cleared.', 'error')
+    notify('SYSTEM RESET. XP and history cleared.', 'error')
+    setConfirmReset(false)
+    setConfirmText('')
   }
 
   const handleSignOut = async () => {
@@ -53,7 +73,39 @@ export default function SettingsPage() {
       notify(`Error: ${err}`, 'error')
       setDeleteLoading(false)
     }
-    // On success, AuthContext signs out and clears state
+  }
+
+  const startEdit = (cfg: StatConfig) => {
+    setEditingKey(cfg.key)
+    setEditLabel(cfg.label)
+    setEditDescription(cfg.description)
+    setEditColor(cfg.color)
+  }
+
+  const saveEdit = () => {
+    if (!editingKey || !editLabel.trim()) return
+    updateStatConfig(editingKey, {
+      label: editLabel.trim(),
+      description: editDescription.trim(),
+      color: editColor,
+    })
+    notify('SKILL UPDATED.', 'success')
+    setEditingKey(null)
+  }
+
+  const handleAddStat = () => {
+    if (!newStatLabel.trim()) return
+    addStat({ label: newStatLabel.trim(), description: newStatDesc.trim(), color: newStatColor })
+    notify(`SKILL "${newStatLabel.trim().toUpperCase()}" ADDED.`, 'success')
+    setNewStatLabel('')
+    setNewStatDesc('')
+    setNewStatColor(STAT_PALETTE[statConfig.length % STAT_PALETTE.length])
+  }
+
+  const handleDeleteStat = (key: string) => {
+    deleteStat(key)
+    notify('SKILL DELETED.', 'error')
+    setConfirmDeleteStat(null)
   }
 
   const totalSubStats = Object.values(player.stats).reduce(
@@ -102,7 +154,7 @@ export default function SettingsPage() {
                 key={stat.label}
                 className="text-center p-2"
                 style={{
-                  border: '1px solid #1e3a8a',
+                  border: '1px solid var(--border-primary)',
                   borderRadius: '2px',
                   backgroundColor: 'rgba(30, 58, 138, 0.1)',
                 }}
@@ -117,8 +169,179 @@ export default function SettingsPage() {
         </div>
       </SystemPanel>
 
-      {/* Name update */}
-      <SystemPanel title="Player Identity" delay={0.05}>
+      {/* Display */}
+      <SystemPanel title="Display" delay={0.03}>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <p className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest mb-0.5">
+              Theme
+            </p>
+            <p className="text-xs text-[#e2e8f0]">{isDark ? 'Dark Mode' : 'Light Mode'}</p>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className="relative w-12 h-6 rounded-full transition-colors duration-300"
+            style={{
+              background: isDark ? 'rgba(30,58,138,0.5)' : '#3b82f6',
+              border: `1px solid ${isDark ? '#1e3a8a' : '#2563eb'}`,
+            }}
+          >
+            <span
+              className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300"
+              style={{
+                left: isDark ? '2px' : '22px',
+                background: isDark ? '#374151' : '#ffffff',
+                boxShadow: isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.2)',
+              }}
+            />
+          </button>
+        </div>
+      </SystemPanel>
+
+      {/* Skills management */}
+      <SystemPanel title="Skills Configuration" delay={0.06}>
+        <div className="p-4 space-y-4">
+          <p className="text-[11px] text-[#64748b]">
+            Rename, recolor, add, or remove core skills. Deleting a skill removes all its sub-skills and associated XP.
+          </p>
+
+          {/* Existing stats */}
+          <div className="space-y-2">
+            {statConfig.map(cfg => (
+              <div key={cfg.key}>
+                {editingKey === cfg.key ? (
+                  <div
+                    className="p-3 space-y-2"
+                    style={{ border: `1px solid ${cfg.color}`, borderRadius: '2px', background: 'rgba(30,58,138,0.1)' }}
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        className="input-system text-sm flex-1"
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)}
+                        placeholder="Skill name"
+                        maxLength={24}
+                      />
+                      <div className="relative shrink-0">
+                        <input
+                          type="color"
+                          value={editColor}
+                          onChange={e => setEditColor(e.target.value)}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                        <div
+                          className="w-10 h-10 rounded border cursor-pointer"
+                          style={{ background: editColor, border: `2px solid ${editColor}` }}
+                        />
+                      </div>
+                    </div>
+                    <input
+                      className="input-system text-xs"
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      placeholder="Description (optional)"
+                      maxLength={80}
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingKey(null)} className="btn-system flex-1 py-1.5 text-[9px]">Cancel</button>
+                      <button onClick={saveEdit} className="btn-system flex-1 py-1.5 text-[9px] btn-system-success">Save</button>
+                    </div>
+                  </div>
+                ) : confirmDeleteStat === cfg.key ? (
+                  <div
+                    className="p-3 space-y-2"
+                    style={{ border: '1px solid #7f1d1d', borderRadius: '2px', background: 'rgba(127,29,29,0.1)' }}
+                  >
+                    <p className="font-orbitron text-[10px] text-[#ef4444] uppercase">
+                      Delete &quot;{cfg.label}&quot;? This removes all sub-skills.
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setConfirmDeleteStat(null)} className="btn-system flex-1 py-1.5 text-[9px]">Cancel</button>
+                      <button onClick={() => handleDeleteStat(cfg.key)} className="btn-system btn-system-danger flex-1 py-1.5 text-[9px]">Delete</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-3 p-2.5"
+                    style={{ border: '1px solid var(--border-primary)', borderRadius: '2px' }}
+                  >
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ background: cfg.color, boxShadow: `0 0 6px ${cfg.color}` }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-orbitron text-xs text-[#e2e8f0]">{cfg.label}</p>
+                      {cfg.description && (
+                        <p className="text-[10px] text-[#64748b] truncate">{cfg.description}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => startEdit(cfg)}
+                        className="px-2 py-1 font-orbitron text-[8px] uppercase tracking-wider transition-all"
+                        style={{ border: '1px solid #1e3a8a', borderRadius: '2px', color: '#93c5fd', background: 'transparent', cursor: 'pointer' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteStat(cfg.key)}
+                        className="px-2 py-1 font-orbitron text-[8px] uppercase tracking-wider transition-all"
+                        style={{ border: '1px solid #7f1d1d', borderRadius: '2px', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}
+                      >
+                        Del
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add new stat */}
+          <div
+            className="p-3 space-y-2"
+            style={{ border: '1px dashed #1e3a8a', borderRadius: '2px', background: 'rgba(30,58,138,0.05)' }}
+          >
+            <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Add New Skill</p>
+            <div className="flex gap-2">
+              <input
+                className="input-system text-sm flex-1"
+                value={newStatLabel}
+                onChange={e => setNewStatLabel(e.target.value)}
+                placeholder="Skill name (e.g. Creativity)"
+                maxLength={24}
+              />
+              <div className="relative shrink-0">
+                <input
+                  type="color"
+                  value={newStatColor}
+                  onChange={e => setNewStatColor(e.target.value)}
+                  className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                />
+                <div
+                  className="w-10 h-10 rounded border cursor-pointer"
+                  style={{ background: newStatColor, border: `2px solid ${newStatColor}` }}
+                />
+              </div>
+            </div>
+            <input
+              className="input-system text-xs"
+              value={newStatDesc}
+              onChange={e => setNewStatDesc(e.target.value)}
+              placeholder="Description (optional)"
+              maxLength={80}
+            />
+            <button
+              onClick={handleAddStat}
+              disabled={!newStatLabel.trim()}
+              className="btn-system btn-system-success w-full py-2"
+              style={{ opacity: newStatLabel.trim() ? 1 : 0.4, cursor: newStatLabel.trim() ? 'pointer' : 'not-allowed' }}
+            >
+              + Add Skill
+            </button>
+          </div>
+        </div>
+      </SystemPanel>
+
+      {/* Player name */}
+      <SystemPanel title="Player Identity" delay={0.09}>
         <form onSubmit={handleNameUpdate} className="p-4 space-y-3">
           <div className="space-y-1.5">
             <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
@@ -146,39 +369,13 @@ export default function SettingsPage() {
         </form>
       </SystemPanel>
 
-      {/* API Key info */}
-      <SystemPanel title="AI Evaluation" headerColor="#4c1d95" delay={0.1}>
-        <div className="p-4 space-y-3">
-          <p className="text-[11px] text-[#64748b] leading-relaxed">
-            The AI evaluation system uses the Google Gemini API (free tier). Set your API key as an environment variable to enable daily log evaluation.
-          </p>
-          <div
-            className="p-3 font-orbitron text-[10px] text-[#64748b]"
-            style={{
-              border: '1px solid #1e3a8a',
-              borderRadius: '2px',
-              backgroundColor: 'rgba(10, 15, 40, 0.5)',
-            }}
-          >
-            <p className="text-[#93c5fd] mb-1">Environment Variable:</p>
-            <p className="text-[#e2e8f0] font-mono tracking-widest">GEMINI_API_KEY</p>
-            <p className="text-[#374151] mt-2 text-[9px]">
-              Get a free key at aistudio.google.com. Set in Vercel project settings or .env.local.
-            </p>
-          </div>
-          <p className="text-[10px] text-[#374151]">
-            Without an API key, log submissions will fail. XP and evaluations require the AI system.
-          </p>
-        </div>
-      </SystemPanel>
-
       {/* Account */}
       <SystemPanel title="Account" delay={0.12}>
         <div className="p-4 space-y-3">
           <div
             className="p-3"
             style={{
-              border: '1px solid #1e3a8a',
+              border: '1px solid var(--border-primary)',
               borderRadius: '2px',
               backgroundColor: 'rgba(30, 58, 138, 0.05)',
             }}
@@ -192,7 +389,7 @@ export default function SettingsPage() {
             disabled={signOutLoading}
             className="w-full py-2.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
             style={{
-              border: '1px solid #1e3a8a',
+              border: '1px solid var(--border-primary)',
               borderRadius: '2px',
               background: 'transparent',
               color: signOutLoading ? '#374151' : '#64748b',
@@ -208,7 +405,7 @@ export default function SettingsPage() {
       <SystemPanel title="Danger Zone" headerColor="#7f1d1d" delay={0.15}>
         <div className="p-4 space-y-4">
           <p className="text-[11px] text-[#64748b]">
-            Resetting the system will permanently delete all player data, quests, logs, and achievements. This action cannot be undone.
+            Resetting clears XP, levels, quest history, logs, and workout logs. Your skills, sub-skills, and workout plans are preserved.
           </p>
 
           {!confirmReset ? (
@@ -232,7 +429,7 @@ export default function SettingsPage() {
           ) : (
             <div className="space-y-3">
               <p className="font-orbitron text-[10px] text-[#ef4444] uppercase tracking-wider">
-                Type &quot;RESET&quot; to confirm — this wipes your game data but keeps your account:
+                Type &quot;RESET&quot; to confirm:
               </p>
               <input
                 type="text"
@@ -252,8 +449,9 @@ export default function SettingsPage() {
                 <button
                   onClick={handleReset}
                   disabled={confirmText !== 'RESET'}
-                  className="flex-1 py-2 font-orbitron text-[10px] uppercase tracking-wider"
                   style={{
+                    flex: 1,
+                    padding: '8px',
                     fontFamily: 'Orbitron, monospace',
                     fontSize: '10px',
                     background: confirmText === 'RESET' ? 'rgba(127, 29, 29, 0.4)' : 'rgba(127, 29, 29, 0.1)',
@@ -261,6 +459,7 @@ export default function SettingsPage() {
                     color: confirmText === 'RESET' ? '#ef4444' : '#374151',
                     cursor: confirmText === 'RESET' ? 'pointer' : 'not-allowed',
                     borderRadius: '2px',
+                    textTransform: 'uppercase',
                   }}
                 >
                   Confirm Reset
@@ -269,7 +468,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="border-t border-[#7f1d1d] pt-4 mt-4">
+          <div className="border-t border-[#7f1d1d] pt-4 mt-2">
             <p className="text-[11px] text-[#64748b] mb-3">
               Permanently delete your account and all associated data. This cannot be undone.
             </p>
@@ -315,8 +514,9 @@ export default function SettingsPage() {
                   <button
                     onClick={handleDeleteAccount}
                     disabled={deleteText !== 'DELETE' || deleteLoading}
-                    className="flex-1 py-2 font-orbitron text-[10px] uppercase tracking-wider"
                     style={{
+                      flex: 1,
+                      padding: '8px',
                       fontFamily: 'Orbitron, monospace',
                       fontSize: '10px',
                       background: deleteText === 'DELETE' ? 'rgba(127, 29, 29, 0.5)' : 'rgba(127, 29, 29, 0.1)',
@@ -324,6 +524,7 @@ export default function SettingsPage() {
                       color: deleteText === 'DELETE' ? '#ef4444' : '#374151',
                       cursor: deleteText === 'DELETE' && !deleteLoading ? 'pointer' : 'not-allowed',
                       borderRadius: '2px',
+                      textTransform: 'uppercase',
                     }}
                   >
                     {deleteLoading ? 'Deleting...' : 'Confirm Delete'}

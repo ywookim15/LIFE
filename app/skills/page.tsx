@@ -7,17 +7,18 @@ import SystemPanel from '@/components/ui/SystemPanel'
 import SkillRadar from '@/components/skills/SkillRadar'
 import SubStatList from '@/components/skills/SubStatList'
 import SubStatRadar from '@/components/skills/SubStatRadar'
-import { ALL_STAT_KEYS, getStatColor, getStatLabel, getStatDescription } from '@/lib/gameLogic'
-import { StatKey } from '@/lib/types'
+import { getStatColor, getStatLabel, getStatDescription } from '@/lib/gameLogic'
 
 export default function SkillsPage() {
   const player = useGameStore(s => s.player)
-  const [selectedStat, setSelectedStat] = useState<StatKey | null>(null)
+  const statConfig = useGameStore(s => s.statConfig)
+  const [selectedStat, setSelectedStat] = useState<string | null>(null)
 
   if (!player) return null
 
-  const totalSubStats = ALL_STAT_KEYS.reduce(
-    (acc, k) => acc + player.stats[k].subStats.length,
+  const statKeys = statConfig.map(c => c.key).filter(k => !!player.stats[k])
+  const totalSubStats = statKeys.reduce(
+    (acc, k) => acc + (player.stats[k]?.subStats.length ?? 0),
     0
   )
 
@@ -32,19 +33,19 @@ export default function SkillsPage() {
         </h1>
       </div>
 
-      {/* Main two-column layout — hidden entirely when drill-down is active */}
+      {/* Main two-column layout */}
       <div className={selectedStat ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4'}>
         {/* Left: Radar chart */}
         <SystemPanel title="Skill Radar" delay={0}>
           <div className="p-4">
-            <SkillRadar player={player} />
+            <SkillRadar player={player} statConfig={statConfig} />
             <div className="mt-3 flex items-center justify-center gap-4">
               <span className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">
                 {totalSubStats} skills tracked
               </span>
               <span className="text-[#1e3a8a]">|</span>
               <span className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">
-                Scale: 0 — 100
+                Proportional Scale
               </span>
             </div>
           </div>
@@ -53,9 +54,10 @@ export default function SkillsPage() {
         {/* Right: Stat cards */}
         <SystemPanel title="Stats" delay={0.1}>
           <div className="p-3 space-y-2">
-            {ALL_STAT_KEYS.map(stat => {
+            {statKeys.map(stat => {
               const block = player.stats[stat]
-              const color = getStatColor(stat)
+              if (!block) return null
+              const color = getStatColor(stat, statConfig)
               const isSelected = selectedStat === stat
               return (
                 <button
@@ -82,16 +84,15 @@ export default function SkillsPage() {
                   }}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-orbitron text-xl font-black" style={{ color }}>
-                      {stat}
+                    <span className="font-orbitron text-base font-black" style={{ color }}>
+                      {getStatLabel(stat, statConfig)}
                     </span>
-                    <span className="text-[11px] text-[#64748b] flex-1">{getStatLabel(stat)}</span>
-                    <span className="font-orbitron text-base font-black" style={{ color: '#93c5fd' }}>
+                    <span className="font-orbitron text-base font-black ml-auto" style={{ color: '#93c5fd' }}>
                       {block.value}
                     </span>
                   </div>
                   <p className="text-[10px] text-[#374151] italic mb-1.5 leading-snug">
-                    {getStatDescription(stat)}
+                    {getStatDescription(stat, statConfig)}
                   </p>
                   <span
                     className="font-orbitron text-[9px] px-1.5 py-0.5"
@@ -112,6 +113,7 @@ export default function SkillsPage() {
           <DrillDownPanel
             stat={selectedStat}
             player={player}
+            statConfig={statConfig}
             onBack={() => setSelectedStat(null)}
           />
         )}
@@ -121,14 +123,16 @@ export default function SkillsPage() {
 }
 
 interface DrillDownProps {
-  stat: StatKey
+  stat: string
   player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>
+  statConfig: import('@/lib/types').StatConfig[]
   onBack: () => void
 }
 
-function DrillDownPanel({ stat, player, onBack }: DrillDownProps) {
-  const color = getStatColor(stat)
+function DrillDownPanel({ stat, player, statConfig, onBack }: DrillDownProps) {
+  const color = getStatColor(stat, statConfig)
   const block = player.stats[stat]
+  if (!block) return null
 
   return (
     <motion.div
@@ -137,7 +141,7 @@ function DrillDownPanel({ stat, player, onBack }: DrillDownProps) {
       exit={{ opacity: 0, y: 12 }}
       transition={{ duration: 0.25 }}
     >
-      <SystemPanel title={`${stat} — ${getStatLabel(stat)}`} headerColor={color} delay={0}>
+      <SystemPanel title={`${getStatLabel(stat, statConfig)}`} headerColor={color} delay={0}>
         <div className="p-4 space-y-4">
           {/* Back button */}
           <button
@@ -157,15 +161,14 @@ function DrillDownPanel({ stat, player, onBack }: DrillDownProps) {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <span className="font-orbitron text-2xl font-black" style={{ color }}>
-                {stat}
+                {getStatLabel(stat, statConfig)}
               </span>
-              <span className="text-[13px] text-[#94a3b8]">{getStatLabel(stat)}</span>
               <span className="font-orbitron text-xl font-black ml-auto" style={{ color: '#93c5fd' }}>
                 {block.value}
               </span>
             </div>
             <p className="text-[11px] text-[#64748b] italic leading-relaxed">
-              {getStatDescription(stat)}
+              {getStatDescription(stat, statConfig)}
             </p>
           </div>
 
@@ -183,7 +186,7 @@ function DrillDownPanel({ stat, player, onBack }: DrillDownProps) {
           </div>
 
           {/* SubStatList in always-expanded mode */}
-          <SubStatList stat={stat} alwaysExpanded={true} />
+          <SubStatList stat={stat} statConfig={statConfig} alwaysExpanded={true} />
         </div>
       </SystemPanel>
     </motion.div>
