@@ -251,18 +251,7 @@ export default function CalendarPage() {
       map[ds].push(item)
     }
 
-    // Active daily habits — show on today only
-    for (const q of quests) {
-      if (q.type !== 'habit' || q.status !== 'active') continue
-      addItem(todayStr, {
-        id: q.id + '_habit',
-        label: '↺ ' + (q.shortTitle || (q.title.length > 10 ? q.title.slice(0, 9) + '…' : q.title)),
-        color: '#3b82f6',
-        type: 'quest',
-      })
-    }
-
-    // Quests with due dates
+    // Quests with due dates (habits excluded — they have no due date and are shown in the Quests tab)
     for (const q of quests) {
       if (!q.dueDate) continue
       const ds = q.dueDate
