@@ -801,9 +801,6 @@ export default function BodyPage() {
             <SystemPanel title="Muscle Strength Radar" delay={0.05}>
               <div className="p-4">
                 <MuscleRadar workoutLogs={workoutLogs} />
-                <p className="font-orbitron text-[8px] text-[#374151] text-center mt-1">
-                  Score = best est. 1RM vs elite benchmark
-                </p>
               </div>
             </SystemPanel>
           </div>
