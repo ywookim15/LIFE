@@ -38,13 +38,14 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
 
   const isEdit = !!existingQuest
 
-  const defaultStat = existingQuest?.linkedStat ?? statConfig[0]?.key ?? 'INT'
+  const defaultStats: StatKey[] = existingQuest?.linkedStats
+    ?? (existingQuest?.linkedStat ? [existingQuest.linkedStat] : statConfig[0] ? [statConfig[0].key] : [])
 
   const [title, setTitle] = useState(existingQuest?.title ?? '')
   const [shortTitle, setShortTitle] = useState(existingQuest?.shortTitle ?? '')
   const [description, setDescription] = useState(existingQuest?.description ?? '')
   const [type, setType] = useState<Quest['type']>(existingQuest?.type ?? defaultType)
-  const [linkedStat, setLinkedStat] = useState<StatKey>(defaultStat)
+  const [selectedStats, setSelectedStats] = useState<StatKey[]>(defaultStats)
   const [linkedSubStats, setLinkedSubStats] = useState<string[]>(existingQuest?.linkedSubStats ?? [])
   const [dueDate, setDueDate] = useState(existingQuest?.dueDate ?? '')
   const [dueTime, setDueTime] = useState(existingQuest?.dueTime ?? '')
@@ -53,12 +54,20 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
   )
   const [isRecurring, setIsRecurring] = useState(existingQuest?.isRecurring ?? true)
 
-  // Only show subStats from the currently selected stat
-  const currentSubStats = player?.stats[linkedStat]?.subStats ?? []
+  // Sub-stats from ALL selected stats combined
+  const currentSubStats = selectedStats.flatMap(k => player?.stats[k]?.subStats ?? [])
 
-  const handleStatChange = (stat: StatKey) => {
-    setLinkedStat(stat)
-    setLinkedSubStats([]) // clear substat selection when stat changes
+  const toggleStat = (key: StatKey) => {
+    setSelectedStats(prev => {
+      if (prev.includes(key)) {
+        if (prev.length === 1) return prev // must keep at least one
+        // Remove any linked sub-stats that belong to this stat
+        const removedSubIds = new Set(player?.stats[key]?.subStats.map(ss => ss.id) ?? [])
+        setLinkedSubStats(ls => ls.filter(id => !removedSubIds.has(id)))
+        return prev.filter(k2 => k2 !== key)
+      }
+      return [...prev, key]
+    })
   }
 
   const toggleSubStat = (id: string) => {
@@ -79,12 +88,14 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
           .map(m => ({ id: generateId(), title: m.trim(), completed: false }))
       : undefined
 
+    const primaryStat = selectedStats[0] ?? statConfig[0]?.key ?? 'INT'
     const questData = {
       title: title.trim(),
       shortTitle: shortTitle.trim() || undefined,
       description: description.trim(),
       type,
-      linkedStat,
+      linkedStat: primaryStat,
+      linkedStats: selectedStats.length > 1 ? selectedStats : undefined,
       linkedSubStats,
       dueDate: (type !== 'habit' && type !== 'lifePurpose' && dueDate) ? dueDate : undefined,
       dueTime: (type !== 'habit' && type !== 'lifePurpose' && dueDate && dueTime) ? dueTime : undefined,
@@ -235,28 +246,40 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               />
             </div>
 
-            {/* Linked stat — dynamic from statConfig */}
+            {/* Linked skills — multi-select */}
             <div className="space-y-1.5">
-              <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                Linked Skill
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest">
+                  Linked Skills
+                </label>
+                {selectedStats.length > 1 && (
+                  <span
+                    className="font-orbitron text-[8px] px-1.5 py-0.5"
+                    style={{ border: '1px solid #3b82f6', borderRadius: '2px', color: '#93c5fd', backgroundColor: 'rgba(59,130,246,0.15)' }}
+                  >
+                    {selectedStats.length} selected · XP split evenly
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {statConfig.map(cfg => {
                   const color = getStatColor(cfg.key, statConfig)
-                  const selected = linkedStat === cfg.key
+                  const selected = selectedStats.includes(cfg.key)
                   return (
                     <button
                       key={cfg.key}
                       type="button"
-                      onClick={() => handleStatChange(cfg.key)}
+                      onClick={() => toggleStat(cfg.key)}
                       className="py-1.5 px-3 font-orbitron text-[10px] uppercase tracking-wider transition-all"
                       style={{
                         border: `1px solid ${selected ? color : 'var(--border-primary)'}`,
                         borderRadius: '2px',
-                        backgroundColor: selected ? `${color}22` : 'transparent',
+                        backgroundColor: selected ? `${color}28` : 'transparent',
                         color: selected ? color : 'var(--text-muted)',
+                        boxShadow: selected ? `0 0 6px ${color}44` : 'none',
                       }}
                     >
+                      {selected && <span className="mr-1 opacity-70">✓</span>}
                       {getStatLabel(cfg.key, statConfig)}
                     </button>
                   )
@@ -264,11 +287,11 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               </div>
             </div>
 
-            {/* Linked sub-stats — filtered to selected stat only */}
+            {/* Linked sub-stats — from all selected stats */}
             {currentSubStats.length > 0 && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
-                  Linked Sub-Skills <span className="normal-case font-normal text-[#374151]">(optional)</span>
+                  Linked Sub-Skills <span className="normal-case font-normal text-[#374151]">(optional — from selected skills)</span>
                 </label>
                 <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto pr-1">
                   {currentSubStats.map(ss => (

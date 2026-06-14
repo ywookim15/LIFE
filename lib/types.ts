@@ -50,7 +50,8 @@ export interface Quest {
   description: string
   type: 'habit' | 'today' | 'weekly' | 'yearly' | 'lifePurpose'
   status: 'active' | 'completed' | 'failed'
-  linkedStat: StatKey
+  linkedStat: StatKey       // primary stat (first selected), used for display color
+  linkedStats?: StatKey[]   // all selected stats; XP is split evenly between them
   linkedSubStats: string[]
   createdAt: string
   dueDate?: string

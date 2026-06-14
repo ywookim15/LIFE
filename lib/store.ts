@@ -298,7 +298,10 @@ export const useGameStore = create<GameStore>()(
       const BASE_XP: Record<Quest['type'], number> = { habit: 50, today: 75, weekly: 150, yearly: 300, lifePurpose: 500 }
       const streakBonus = quest.type === 'habit' ? getStreakMultiplier(quest.streak ?? 0) : 1.0
       const totalXP = Math.round((BASE_XP[quest.type] ?? 75) * streakBonus)
-      get().awardXP(totalXP, [{ stat: quest.linkedStat, xp: totalXP, reasoning: `${quest.type} quest completed` }])
+      const allStats = (quest.linkedStats && quest.linkedStats.length > 0) ? quest.linkedStats : [quest.linkedStat]
+      const xpPerStat = Math.max(1, Math.round(totalXP / allStats.length))
+      const breakdown = allStats.map(stat => ({ stat, xp: xpPerStat, reasoning: `${quest.type} quest completed` }))
+      get().awardXP(totalXP, breakdown)
       get().checkAndUnlockAchievements()
     },
 
