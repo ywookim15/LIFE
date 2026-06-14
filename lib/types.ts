@@ -154,6 +154,8 @@ export interface ManualPR {
 
 // ─── Workout / Body System ─────────────────────────────────────────────────
 
+export type ExerciseType = 'gym' | 'calisthenics' | 'cardio'
+
 export type MuscleGroup =
   | 'chest' | 'back' | 'triceps' | 'biceps' | 'forearms'
   | 'abs' | 'calves' | 'quads' | 'hamstrings' | 'shoulders'
@@ -166,11 +168,14 @@ export const ALL_MUSCLES: MuscleGroup[] = [
 export interface LoggedSet {
   reps: number
   weight: number
+  distance?: number   // meters (cardio)
+  duration?: number   // seconds (cardio)
 }
 
 export interface LoggedExercise {
   name: string
   muscleGroups: MuscleGroup[]
+  exerciseType?: ExerciseType
   sets: LoggedSet[]
 }
 
@@ -187,6 +192,7 @@ export interface PlanExercise {
   id: string
   name: string
   muscleGroups: MuscleGroup[]
+  exerciseType?: ExerciseType
   sets: number
   reps: number
   weight?: number

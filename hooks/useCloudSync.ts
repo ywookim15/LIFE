@@ -22,10 +22,20 @@ function buildPayload(userId: string) {
   }
 }
 
+// Module-level immediate-save trigger — callable from anywhere (e.g. QuestCard on habit complete)
+let _immediateSave: (() => void) | null = null
+export function flushSave() { _immediateSave?.() }
+
 export function useCloudSync() {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasPendingRef = useRef(false)
+  // Cache the token synchronously so keepalive flush doesn't need an async getSession() call
+  const tokenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    tokenRef.current = session?.access_token ?? null
+  }, [session])
 
   useEffect(() => {
     if (!user) return
@@ -34,21 +44,19 @@ export function useCloudSync() {
       const payload = buildPayload(user.id)
       if (!payload) return
       hasPendingRef.current = false
+      timerRef.current = null
       await supabase.from('player_data').upsert(payload, { onConflict: 'user_id' })
     }
 
-    // Flush using keepalive fetch so the request survives page unload.
-    // Falls back to regular save for environments without keepalive support.
-    const flushWithKeepalive = async () => {
+    // Fully synchronous keepalive flush — safe to call during beforeunload
+    const flushWithKeepalive = () => {
       if (!hasPendingRef.current) return
       if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
       hasPendingRef.current = false
 
+      const token = tokenRef.current
       const payload = buildPayload(user.id)
-      if (!payload) return
-
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      if (!payload || !token) return
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -60,14 +68,13 @@ export function useCloudSync() {
           headers: {
             'Content-Type': 'application/json',
             'apikey': supabaseKey,
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${token}`,
             'Prefer': 'resolution=merge-duplicates,return=minimal',
           },
           body: JSON.stringify(payload),
         })
       } catch {
-        // keepalive may throw in some browsers; fall back to regular save
-        save()
+        // keepalive may throw in some browsers; ignore — regular debounce will retry
       }
     }
 
@@ -78,6 +85,12 @@ export function useCloudSync() {
       timerRef.current = setTimeout(save, 500)
     }
 
+    _immediateSave = () => {
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+      hasPendingRef.current = true
+      save()
+    }
+
     const onHide = () => { if (document.visibilityState === 'hidden') flushWithKeepalive() }
     const onUnload = () => flushWithKeepalive()
 
@@ -86,6 +99,7 @@ export function useCloudSync() {
     window.addEventListener('beforeunload', onUnload)
 
     return () => {
+      _immediateSave = null
       unsub()
       if (timerRef.current) clearTimeout(timerRef.current)
       document.removeEventListener('visibilitychange', onHide)

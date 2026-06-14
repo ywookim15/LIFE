@@ -11,7 +11,6 @@ import { getDaysActive } from '@/lib/gameLogic'
 import { STAT_PALETTE } from '@/lib/defaultData'
 import type { StatConfig } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
-import { FONT_OPTIONS } from '@/contexts/ThemeContext'
 
 export default function SettingsPage() {
   const player = useGameStore(s => s.player)
@@ -25,7 +24,7 @@ export default function SettingsPage() {
   const quests = useGameStore(s => s.quests)
   const { notify } = useNotification()
   const { user, signOut, deleteAccount } = useAuth()
-  const { isDark, toggleTheme, fontId, setFont } = useTheme()
+  const { isDark, toggleTheme } = useTheme()
 
   const [newName, setNewName] = useState(player?.name || '')
   const [confirmReset, setConfirmReset] = useState(false)
@@ -207,22 +206,6 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          {/* Font selector */}
-          <div>
-            <p className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest mb-2">UI Font</p>
-            <select
-              value={fontId}
-              onChange={e => setFont(e.target.value)}
-              className="select-system w-full"
-            >
-              {FONT_OPTIONS.map(f => (
-                <option key={f.id} value={f.id}>{f.label}</option>
-              ))}
-            </select>
-            <p className="font-orbitron text-[8px] text-[#374151] mt-1.5">
-              Changes the body text font. Orbitron display font remains unchanged.
-            </p>
-          </div>
         </div>
       </SystemPanel>
 

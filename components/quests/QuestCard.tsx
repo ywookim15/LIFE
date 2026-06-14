@@ -8,6 +8,7 @@ import { useGameStore } from '@/lib/store'
 import { useNotification } from '@/contexts/NotificationContext'
 import QuestForm from './QuestForm'
 import HabitHeatmap from './HabitHeatmap'
+import { flushSave } from '@/hooks/useCloudSync'
 
 interface QuestCardProps {
   quest: Quest
@@ -50,6 +51,7 @@ export default function QuestCard({ quest, defaultType }: QuestCardProps) {
   const handleComplete = () => {
     completeQuest(quest.id)
     notify(`QUEST COMPLETE. +XP pending evaluation.`, 'success')
+    if (quest.type === 'habit') flushSave()
   }
 
   const handleFail = () => {

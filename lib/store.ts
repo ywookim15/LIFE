@@ -6,7 +6,7 @@ import {
 } from './types'
 import {
   calcXPToNext, getNextTier, generateId, getTodayDate,
-  checkAchievements, getStreakMultiplier,
+  checkAchievements, getStreakMultiplier, localDateStr,
 } from './gameLogic'
 import { createInitialPlayer, DEFAULT_ACHIEVEMENTS, DEFAULT_TITLES, DEFAULT_STAT_CONFIG } from './defaultData'
 
@@ -339,6 +339,8 @@ export const useGameStore = create<GameStore>()(
         quests: s.quests.map(q => {
           if (q.type !== 'habit' || !q.isRecurring) return q
           if (q.lastResetDate === today) return q
+          // Guard using completedAt in case lastResetDate wasn't persisted before reload
+          if (q.completedAt && localDateStr(new Date(q.completedAt)) === today) return q
           const prevDate = q.lastResetDate
           if (q.status === 'completed') {
             return {

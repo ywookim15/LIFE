@@ -10,7 +10,7 @@ import MuscleRadar from '@/components/body/MuscleRadar'
 import WorkoutCalendar from '@/components/body/WorkoutCalendar'
 import ExerciseProgressChart from '@/components/body/ExerciseProgressChart'
 import {
-  MuscleGroup, ALL_MUSCLES, WorkoutLog, WorkoutPlan, PlanExercise, LoggedExercise, ManualPR,
+  MuscleGroup, ALL_MUSCLES, WorkoutLog, WorkoutPlan, PlanExercise, LoggedExercise, ManualPR, ExerciseType,
 } from '@/lib/types'
 import { generateId, getTodayDate, localDateStr } from '@/lib/gameLogic'
 
@@ -56,9 +56,31 @@ interface PlanFormExercise {
   id: string
   name: string
   muscleGroups: MuscleGroup[]
+  exerciseType: ExerciseType
   sets: number
   reps: number
   weight: number
+}
+
+function ExTypeButtons({ value, onChange }: { value: ExerciseType; onChange: (t: ExerciseType) => void }) {
+  return (
+    <div className="flex gap-1">
+      {(['gym', 'calisthenics', 'cardio'] as ExerciseType[]).map(t => (
+        <button
+          key={t}
+          onClick={() => onChange(t)}
+          className="flex-1 py-1 font-orbitron text-[8px] uppercase tracking-wider capitalize transition-all"
+          style={{
+            border: `1px solid ${value === t ? '#ef4444' : '#1e3a8a'}`,
+            borderRadius: '2px',
+            backgroundColor: value === t ? 'rgba(239,68,68,0.2)' : 'transparent',
+            color: value === t ? '#ef4444' : '#475569',
+            cursor: 'pointer',
+          }}
+        >{t}</button>
+      ))}
+    </div>
+  )
 }
 
 function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPlan?: WorkoutPlan }) {
@@ -67,13 +89,22 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
   const { notify } = useNotification()
   const [name, setName] = useState(existingPlan?.name ?? '')
   const [exercises, setExercises] = useState<PlanFormExercise[]>(
-    existingPlan?.exercises.map(e => ({ ...e, weight: e.weight ?? 0 })) ?? []
+    existingPlan?.exercises.map(e => ({ ...e, exerciseType: e.exerciseType ?? 'gym', weight: e.weight ?? 0 })) ?? []
   )
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+
+  // Add-exercise form fields
   const [exName, setExName] = useState('')
   const [exMuscles, setExMuscles] = useState<Set<MuscleGroup>>(new Set())
+  const [exType, setExType] = useState<ExerciseType>('gym')
   const [exSets, setExSets] = useState(3)
   const [exReps, setExReps] = useState(10)
   const [exWeight, setExWeight] = useState(0)
+
+  const resetAddForm = () => {
+    setExName(''); setExMuscles(new Set()); setExType('gym')
+    setExSets(3); setExReps(10); setExWeight(0)
+  }
 
   const addExercise = () => {
     if (!exName.trim() || exMuscles.size === 0) return
@@ -81,10 +112,32 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
       id: generateId(),
       name: exName.trim(),
       muscleGroups: [...exMuscles],
+      exerciseType: exType,
       sets: exSets, reps: exReps, weight: exWeight,
     }])
-    setExName(''); setExMuscles(new Set()); setExSets(3); setExReps(10); setExWeight(0)
+    resetAddForm()
   }
+
+  const startEdit = (i: number) => {
+    const ex = exercises[i]
+    setExName(ex.name); setExMuscles(new Set(ex.muscleGroups)); setExType(ex.exerciseType)
+    setExSets(ex.sets); setExReps(ex.reps); setExWeight(ex.weight)
+    setEditingIdx(i)
+  }
+
+  const saveEdit = () => {
+    if (editingIdx === null || !exName.trim() || exMuscles.size === 0) return
+    setExercises(prev => prev.map((ex, i) => i !== editingIdx ? ex : {
+      ...ex,
+      name: exName.trim(),
+      muscleGroups: [...exMuscles],
+      exerciseType: exType,
+      sets: exSets, reps: exReps, weight: exWeight,
+    }))
+    setEditingIdx(null); resetAddForm()
+  }
+
+  const cancelEdit = () => { setEditingIdx(null); resetAddForm() }
 
   const movePlanEx = (i: number, dir: -1 | 1) => {
     setExercises(prev => {
@@ -109,139 +162,174 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
   }
 
   const toggleMuscle = (m: MuscleGroup) => {
-    setExMuscles(prev => {
-      const next = new Set(prev)
-      next.has(m) ? next.delete(m) : next.add(m)
-      return next
-    })
+    setExMuscles(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })
   }
 
+  const exSummary = (ex: PlanFormExercise) => {
+    if (ex.exerciseType === 'cardio') return `${ex.sets} sets · ${ex.muscleGroups.join(', ')}`
+    if (ex.exerciseType === 'calisthenics') return `${ex.sets}×${ex.reps} · ${ex.muscleGroups.join(', ')}`
+    return `${ex.sets}×${ex.reps}${ex.weight > 0 ? ` @ ${ex.weight}lbs` : ''} · ${ex.muscleGroups.join(', ')}`
+  }
+
+  const isEditing = editingIdx !== null
+
   return (
-    <motion.div
-      className="space-y-4"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
+    <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
       <div className="space-y-1">
         <label className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest block">Plan Name</label>
-        <input
-          value={name} onChange={e => setName(e.target.value)}
-          className="input-system w-full" placeholder="e.g. Push Day A"
-        />
+        <input value={name} onChange={e => setName(e.target.value)} className="input-system w-full" placeholder="e.g. Push Day A" />
       </div>
 
       {exercises.length > 0 && (
         <div className="space-y-1.5">
           {exercises.map((ex, i) => (
-            <div
-              key={ex.id}
-              className="flex items-center gap-2 p-2"
-              style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}
-            >
-              <div className="flex flex-col gap-0.5 shrink-0">
-                <button
-                  onClick={() => movePlanEx(i, -1)} disabled={i === 0}
-                  className="font-orbitron text-[8px] px-1 leading-none"
-                  style={{ color: i === 0 ? '#1e3a8a' : '#64748b', cursor: i === 0 ? 'default' : 'pointer' }}
-                >▲</button>
-                <button
-                  onClick={() => movePlanEx(i, 1)} disabled={i === exercises.length - 1}
-                  className="font-orbitron text-[8px] px-1 leading-none"
-                  style={{ color: i === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: i === exercises.length - 1 ? 'default' : 'pointer' }}
-                >▼</button>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-[#e2e8f0]">{ex.name}</p>
-                <p className="font-orbitron text-[8px] text-[#64748b]">
-                  {ex.sets}×{ex.reps} {ex.weight > 0 ? `@ ${ex.weight}lbs` : ''} · {ex.muscleGroups.join(', ')}
-                </p>
-              </div>
-              <button
-                onClick={() => setExercises(prev => prev.filter((_, j) => j !== i))}
-                className="font-orbitron text-[8px] text-[#ef4444] px-2 py-1 shrink-0"
-                style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
-              >
-                ×
-              </button>
+            <div key={ex.id}>
+              {isEditing && editingIdx === i ? (
+                /* Inline edit form */
+                <div className="p-3 space-y-3" style={{ border: '1px solid #3b82f6', borderRadius: '2px', backgroundColor: 'rgba(59,130,246,0.07)' }}>
+                  <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Edit Exercise</p>
+                  <input value={exName} onChange={e => setExName(e.target.value)} className="input-system w-full" placeholder="Exercise name" />
+                  <div>
+                    <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1">Type</p>
+                    <ExTypeButtons value={exType} onChange={setExType} />
+                  </div>
+                  <div>
+                    <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1.5">Muscle Groups</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ALL_MUSCLES.map(m => (
+                        <button key={m} onClick={() => toggleMuscle(m)} className="px-2 py-0.5 font-orbitron text-[8px] uppercase tracking-wider transition-all"
+                          style={{ border: `1px solid ${exMuscles.has(m) ? '#ef4444' : '#1e3a8a'}`, borderRadius: '2px', backgroundColor: exMuscles.has(m) ? 'rgba(239,68,68,0.2)' : 'transparent', color: exMuscles.has(m) ? '#ef4444' : '#475569', cursor: 'pointer' }}>
+                          {MUSCLE_LABEL[m]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {exType === 'gym' && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {[{ label: 'Sets', val: exSets, set: setExSets, min: 1 }, { label: 'Reps', val: exReps, set: setExReps, min: 1 }, { label: 'Weight (lbs)', val: exWeight, set: setExWeight, min: 0 }].map(({ label, val, set, min }) => (
+                        <div key={label} className="space-y-1">
+                          <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">{label}</label>
+                          <input type="number" min={min} value={val} onChange={e => set(Number(e.target.value))} className="input-system w-full text-center" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {exType === 'calisthenics' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ label: 'Sets', val: exSets, set: setExSets, min: 1 }, { label: 'Reps', val: exReps, set: setExReps, min: 1 }].map(({ label, val, set, min }) => (
+                        <div key={label} className="space-y-1">
+                          <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">{label}</label>
+                          <input type="number" min={min} value={val} onChange={e => set(Number(e.target.value))} className="input-system w-full text-center" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {exType === 'cardio' && (
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="space-y-1">
+                        <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">Default Sets</label>
+                        <input type="number" min={1} value={exSets} onChange={e => setExSets(Number(e.target.value))} className="input-system w-full text-center" />
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={cancelEdit} className="btn-system flex-1 py-1.5 font-orbitron text-[9px]">Cancel</button>
+                    <button onClick={saveEdit} disabled={!exName.trim() || exMuscles.size === 0}
+                      className="flex-1 py-1.5 font-orbitron text-[9px] uppercase tracking-wider"
+                      style={{ border: '1px solid #3b82f6', borderRadius: '2px', backgroundColor: 'rgba(59,130,246,0.2)', color: '#93c5fd', cursor: 'pointer' }}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2" style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}>
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button onClick={() => movePlanEx(i, -1)} disabled={i === 0} className="font-orbitron text-[8px] px-1 leading-none"
+                      style={{ color: i === 0 ? '#1e3a8a' : '#64748b', cursor: i === 0 ? 'default' : 'pointer' }}>▲</button>
+                    <button onClick={() => movePlanEx(i, 1)} disabled={i === exercises.length - 1} className="font-orbitron text-[8px] px-1 leading-none"
+                      style={{ color: i === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: i === exercises.length - 1 ? 'default' : 'pointer' }}>▼</button>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-[#e2e8f0]">{ex.name}</p>
+                      <span className="font-orbitron text-[7px] px-1 py-0.5 rounded" style={{ backgroundColor: ex.exerciseType === 'cardio' ? 'rgba(251,191,36,0.15)' : ex.exerciseType === 'calisthenics' ? 'rgba(74,222,128,0.15)' : 'rgba(147,197,253,0.15)', color: ex.exerciseType === 'cardio' ? '#fbbf24' : ex.exerciseType === 'calisthenics' ? '#4ade80' : '#93c5fd' }}>{ex.exerciseType}</span>
+                    </div>
+                    <p className="font-orbitron text-[8px] text-[#64748b]">{exSummary(ex)}</p>
+                  </div>
+                  <button onClick={() => startEdit(i)} className="font-orbitron text-[8px] text-[#93c5fd] px-2 py-1 shrink-0" style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}>Edit</button>
+                  <button onClick={() => setExercises(prev => prev.filter((_, j) => j !== i))} className="font-orbitron text-[8px] text-[#ef4444] px-2 py-1 shrink-0" style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}>×</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Add exercise form */}
-      <div
-        className="p-3 space-y-3"
-        style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}
-      >
-        <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Add Exercise</p>
-        <input
-          value={exName} onChange={e => setExName(e.target.value)}
-          className="input-system w-full" placeholder="Exercise name (e.g. Bench Press)"
-        />
+      {/* Add exercise form (hidden while editing inline) */}
+      {!isEditing && (
+        <div className="p-3 space-y-3" style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}>
+          <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Add Exercise</p>
+          <input value={exName} onChange={e => setExName(e.target.value)} className="input-system w-full" placeholder="Exercise name (e.g. Bench Press)" />
 
-        <div>
-          <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1.5">Muscle Groups</p>
-          <div className="flex flex-wrap gap-1.5">
-            {ALL_MUSCLES.map(m => (
-              <button
-                key={m}
-                onClick={() => toggleMuscle(m)}
-                className="px-2 py-0.5 font-orbitron text-[8px] uppercase tracking-wider transition-all"
-                style={{
-                  border: `1px solid ${exMuscles.has(m) ? '#ef4444' : '#1e3a8a'}`,
-                  borderRadius: '2px',
-                  backgroundColor: exMuscles.has(m) ? 'rgba(239,68,68,0.2)' : 'transparent',
-                  color: exMuscles.has(m) ? '#ef4444' : '#475569',
-                  cursor: 'pointer',
-                }}
-              >
-                {MUSCLE_LABEL[m]}
-              </button>
-            ))}
+          <div>
+            <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1">Type</p>
+            <ExTypeButtons value={exType} onChange={setExType} />
           </div>
-        </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: 'Sets', val: exSets, set: setExSets, min: 1, max: 10 },
-            { label: 'Reps', val: exReps, set: setExReps, min: 1, max: 100 },
-            { label: 'Weight (lbs)', val: exWeight, set: setExWeight, min: 0, max: 9999 },
-          ].map(({ label, val, set, min, max }) => (
-            <div key={label} className="space-y-1">
-              <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">{label}</label>
-              <input
-                type="number" min={min} max={max} value={val}
-                onChange={e => set(Number(e.target.value))}
-                className="input-system w-full text-center"
-              />
+          <div>
+            <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1.5">Muscle Groups</p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_MUSCLES.map(m => (
+                <button key={m} onClick={() => toggleMuscle(m)} className="px-2 py-0.5 font-orbitron text-[8px] uppercase tracking-wider transition-all"
+                  style={{ border: `1px solid ${exMuscles.has(m) ? '#ef4444' : '#1e3a8a'}`, borderRadius: '2px', backgroundColor: exMuscles.has(m) ? 'rgba(239,68,68,0.2)' : 'transparent', color: exMuscles.has(m) ? '#ef4444' : '#475569', cursor: 'pointer' }}>
+                  {MUSCLE_LABEL[m]}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
 
-        <button
-          onClick={addExercise}
-          disabled={!exName.trim() || exMuscles.size === 0}
-          className="w-full py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
-          style={{
-            border: '1px solid #1e3a8a', borderRadius: '2px',
-            backgroundColor: 'rgba(30,58,138,0.15)', color: '#64748b', cursor: 'pointer',
-          }}
-        >
-          + Add Exercise
-        </button>
-      </div>
+          {exType === 'gym' && (
+            <div className="grid grid-cols-3 gap-2">
+              {[{ label: 'Sets', val: exSets, set: setExSets, min: 1 }, { label: 'Reps', val: exReps, set: setExReps, min: 1 }, { label: 'Weight (lbs)', val: exWeight, set: setExWeight, min: 0 }].map(({ label, val, set, min }) => (
+                <div key={label} className="space-y-1">
+                  <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">{label}</label>
+                  <input type="number" min={min} value={val} onChange={e => set(Number(e.target.value))} className="input-system w-full text-center" />
+                </div>
+              ))}
+            </div>
+          )}
+          {exType === 'calisthenics' && (
+            <div className="grid grid-cols-2 gap-2">
+              {[{ label: 'Sets', val: exSets, set: setExSets, min: 1 }, { label: 'Reps', val: exReps, set: setExReps, min: 1 }].map(({ label, val, set, min }) => (
+                <div key={label} className="space-y-1">
+                  <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">{label}</label>
+                  <input type="number" min={min} value={val} onChange={e => set(Number(e.target.value))} className="input-system w-full text-center" />
+                </div>
+              ))}
+            </div>
+          )}
+          {exType === 'cardio' && (
+            <div className="grid grid-cols-1 gap-2">
+              <div className="space-y-1">
+                <label className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider block">Default Sets</label>
+                <input type="number" min={1} value={exSets} onChange={e => setExSets(Number(e.target.value))} className="input-system w-full text-center" />
+              </div>
+            </div>
+          )}
+
+          <button onClick={addExercise} disabled={!exName.trim() || exMuscles.size === 0}
+            className="w-full py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
+            style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.15)', color: '#64748b', cursor: 'pointer' }}>
+            + Add Exercise
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <button onClick={onDone} className="btn-system flex-1 py-2 font-orbitron text-[9px]">Cancel</button>
-        <button
-          onClick={save}
-          disabled={!name.trim() || exercises.length === 0}
+        <button onClick={save} disabled={!name.trim() || exercises.length === 0}
           className="flex-1 py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
-          style={{
-            border: '1px solid #3b82f6', borderRadius: '2px',
-            backgroundColor: 'rgba(59,130,246,0.2)', color: '#93c5fd', cursor: 'pointer',
-          }}
-        >
+          style={{ border: '1px solid #3b82f6', borderRadius: '2px', backgroundColor: 'rgba(59,130,246,0.2)', color: '#93c5fd', cursor: 'pointer' }}>
           {existingPlan ? 'Save Changes' : 'Save Plan'}
         </button>
       </div>
@@ -251,8 +339,14 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
 
 // ─── Workout Logger ────────────────────────────────────────────────────────────
 
-interface LogSet { reps: number; weight: number }
-interface LogExForm { id: string; name: string; muscleGroups: MuscleGroup[]; sets: LogSet[] }
+interface LogSet { reps: number; weight: number; distance?: number; duration?: number }
+interface LogExForm { id: string; name: string; muscleGroups: MuscleGroup[]; exerciseType: ExerciseType; sets: LogSet[] }
+
+function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
 function WorkoutLogger({ onDone }: { onDone: () => void }) {
   const workoutPlans = useGameStore(s => s.workoutPlans)
@@ -265,65 +359,62 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
   const [addExOpen, setAddExOpen] = useState(false)
   const [newExName, setNewExName] = useState('')
   const [newExMuscles, setNewExMuscles] = useState<Set<MuscleGroup>>(new Set())
+  const [newExType, setNewExType] = useState<ExerciseType>('gym')
 
   const loadPlan = (planId: string) => {
     const plan = workoutPlans.find(p => p.id === planId)
     if (!plan) return
     setSelectedPlanId(planId)
-    setExercises(plan.exercises.map(ex => ({
-      id: ex.id,
-      name: ex.name,
-      muscleGroups: ex.muscleGroups,
-      sets: Array.from({ length: ex.sets }, () => ({ reps: ex.reps, weight: ex.weight ?? 0 })),
-    })))
+    setExercises(plan.exercises.map(ex => {
+      const et = ex.exerciseType ?? 'gym'
+      const defaultSet: LogSet = et === 'cardio'
+        ? { reps: 0, weight: 0, distance: 0, duration: 0 }
+        : et === 'calisthenics'
+        ? { reps: ex.reps, weight: 0 }
+        : { reps: ex.reps, weight: ex.weight ?? 0 }
+      return { id: ex.id, name: ex.name, muscleGroups: ex.muscleGroups, exerciseType: et, sets: Array.from({ length: ex.sets }, () => ({ ...defaultSet })) }
+    }))
   }
 
   const addCustomEx = () => {
     if (!newExName.trim() || newExMuscles.size === 0) return
-    setExercises(prev => [...prev, {
-      id: generateId(),
-      name: newExName.trim(),
-      muscleGroups: [...newExMuscles],
-      sets: [{ reps: 10, weight: 0 }],
-    }])
-    setNewExName(''); setNewExMuscles(new Set()); setAddExOpen(false)
+    const defaultSet: LogSet = newExType === 'cardio'
+      ? { reps: 0, weight: 0, distance: 0, duration: 0 }
+      : newExType === 'calisthenics' ? { reps: 10, weight: 0 } : { reps: 10, weight: 0 }
+    setExercises(prev => [...prev, { id: generateId(), name: newExName.trim(), muscleGroups: [...newExMuscles], exerciseType: newExType, sets: [defaultSet] }])
+    setNewExName(''); setNewExMuscles(new Set()); setNewExType('gym'); setAddExOpen(false)
   }
 
-  const updateSet = (exIdx: number, setIdx: number, field: 'reps' | 'weight', val: number) => {
+  const updateSet = (exIdx: number, setIdx: number, field: keyof LogSet, val: number) => {
     setExercises(prev => prev.map((ex, i) =>
-      i !== exIdx ? ex : {
-        ...ex,
-        sets: ex.sets.map((s, j) => j !== setIdx ? s : { ...s, [field]: val }),
-      }
+      i !== exIdx ? ex : { ...ex, sets: ex.sets.map((s, j) => j !== setIdx ? s : { ...s, [field]: val }) }
     ))
   }
 
   const addSet = (exIdx: number) => {
-    setExercises(prev => prev.map((ex, i) =>
-      i !== exIdx ? ex : {
-        ...ex,
-        sets: [...ex.sets, { reps: ex.sets[ex.sets.length - 1]?.reps ?? 10, weight: ex.sets[ex.sets.length - 1]?.weight ?? 0 }],
-      }
-    ))
+    setExercises(prev => prev.map((ex, i) => {
+      if (i !== exIdx) return ex
+      const last = ex.sets[ex.sets.length - 1]
+      const newSet: LogSet = ex.exerciseType === 'cardio'
+        ? { reps: 0, weight: 0, distance: last?.distance ?? 0, duration: last?.duration ?? 0 }
+        : ex.exerciseType === 'calisthenics'
+        ? { reps: last?.reps ?? 10, weight: 0 }
+        : { reps: last?.reps ?? 10, weight: last?.weight ?? 0 }
+      return { ...ex, sets: [...ex.sets, newSet] }
+    }))
   }
 
   const removeSet = (exIdx: number, setIdx: number) => {
-    setExercises(prev => prev.map((ex, i) =>
-      i !== exIdx ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) }
-    ))
+    setExercises(prev => prev.map((ex, i) => i !== exIdx ? ex : { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) }))
   }
 
-  const removeExercise = (exIdx: number) => {
-    setExercises(prev => prev.filter((_, i) => i !== exIdx))
-  }
+  const removeExercise = (exIdx: number) => { setExercises(prev => prev.filter((_, i) => i !== exIdx)) }
 
   const moveLogEx = (i: number, dir: -1 | 1) => {
     setExercises(prev => {
-      const next = [...prev]
-      const j = i + dir
+      const next = [...prev]; const j = i + dir
       if (j < 0 || j >= next.length) return prev
-      ;[next[i], next[j]] = [next[j], next[i]]
-      return next
+      ;[next[i], next[j]] = [next[j], next[i]]; return next
     })
   }
 
@@ -338,6 +429,7 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
       exercises: withSets.map(ex => ({
         name: ex.name,
         muscleGroups: ex.muscleGroups,
+        exerciseType: ex.exerciseType,
         sets: ex.sets,
       })) as LoggedExercise[],
       notes: notes.trim() || undefined,
@@ -355,18 +447,9 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
           <label className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest block">Load from Plan</label>
           <div className="flex flex-wrap gap-2">
             {workoutPlans.map(p => (
-              <button
-                key={p.id}
-                onClick={() => loadPlan(p.id)}
+              <button key={p.id} onClick={() => loadPlan(p.id)}
                 className="px-3 py-1.5 font-orbitron text-[9px] uppercase tracking-wider transition-all"
-                style={{
-                  border: `1px solid ${selectedPlanId === p.id ? '#3b82f6' : '#1e3a8a'}`,
-                  borderRadius: '2px',
-                  backgroundColor: selectedPlanId === p.id ? 'rgba(59,130,246,0.2)' : 'transparent',
-                  color: selectedPlanId === p.id ? '#93c5fd' : '#475569',
-                  cursor: 'pointer',
-                }}
-              >
+                style={{ border: `1px solid ${selectedPlanId === p.id ? '#3b82f6' : '#1e3a8a'}`, borderRadius: '2px', backgroundColor: selectedPlanId === p.id ? 'rgba(59,130,246,0.2)' : 'transparent', color: selectedPlanId === p.id ? '#93c5fd' : '#475569', cursor: 'pointer' }}>
                 {p.name}
               </button>
             ))}
@@ -375,114 +458,120 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
       )}
 
       {/* Exercises */}
-      {exercises.map((ex, exIdx) => (
-        <div key={ex.id} style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}>
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1e3a8a]">
-            <div className="flex flex-col gap-0.5 shrink-0">
-              <button onClick={() => moveLogEx(exIdx, -1)} disabled={exIdx === 0}
-                className="font-orbitron text-[8px] leading-none px-0.5"
-                style={{ color: exIdx === 0 ? '#1e3a8a' : '#64748b', cursor: exIdx === 0 ? 'default' : 'pointer' }}>▲</button>
-              <button onClick={() => moveLogEx(exIdx, 1)} disabled={exIdx === exercises.length - 1}
-                className="font-orbitron text-[8px] leading-none px-0.5"
-                style={{ color: exIdx === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: exIdx === exercises.length - 1 ? 'default' : 'pointer' }}>▼</button>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-orbitron text-xs text-[#e2e8f0]">{ex.name}</p>
-              <p className="font-orbitron text-[8px] text-[#475569]">{ex.muscleGroups.map(m => MUSCLE_LABEL[m]).join(' · ')}</p>
-            </div>
-            <button
-              onClick={() => removeExercise(exIdx)}
-              className="font-orbitron text-[8px] text-[#ef4444] px-1.5 py-0.5 shrink-0"
-              style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
-            >×</button>
-          </div>
-
-          <div className="p-3 space-y-1.5">
-            <div className="grid grid-cols-3 gap-2 mb-1">
-              {['Set', 'Reps', 'Weight (lbs)'].map(h => (
-                <p key={h} className="font-orbitron text-[8px] text-[#374151] uppercase tracking-wider text-center">{h}</p>
-              ))}
-            </div>
-            {ex.sets.map((set, setIdx) => (
-              <div key={setIdx} className="grid grid-cols-3 gap-2 items-center">
-                <div className="flex items-center justify-center">
-                  <span className="font-orbitron text-[10px] text-[#64748b]">{setIdx + 1}</span>
+      {exercises.map((ex, exIdx) => {
+        const et = ex.exerciseType
+        return (
+          <div key={ex.id} style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1e3a8a]">
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button onClick={() => moveLogEx(exIdx, -1)} disabled={exIdx === 0} className="font-orbitron text-[8px] leading-none px-0.5"
+                  style={{ color: exIdx === 0 ? '#1e3a8a' : '#64748b', cursor: exIdx === 0 ? 'default' : 'pointer' }}>▲</button>
+                <button onClick={() => moveLogEx(exIdx, 1)} disabled={exIdx === exercises.length - 1} className="font-orbitron text-[8px] leading-none px-0.5"
+                  style={{ color: exIdx === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: exIdx === exercises.length - 1 ? 'default' : 'pointer' }}>▼</button>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="font-orbitron text-xs text-[#e2e8f0]">{ex.name}</p>
+                  <span className="font-orbitron text-[7px] px-1 py-0.5 rounded" style={{ backgroundColor: et === 'cardio' ? 'rgba(251,191,36,0.15)' : et === 'calisthenics' ? 'rgba(74,222,128,0.15)' : 'rgba(147,197,253,0.15)', color: et === 'cardio' ? '#fbbf24' : et === 'calisthenics' ? '#4ade80' : '#93c5fd' }}>{et}</span>
                 </div>
-                <input
-                  type="number" min={1} max={999} value={set.reps}
-                  onChange={e => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))}
-                  className="input-system text-center text-xs"
-                />
-                <div className="flex gap-1">
-                  <input
-                    type="number" min={0} max={9999} value={set.weight}
-                    onChange={e => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))}
-                    className="input-system text-center text-xs flex-1"
-                  />
-                  {ex.sets.length > 1 && (
-                    <button
-                      onClick={() => removeSet(exIdx, setIdx)}
-                      className="font-orbitron text-[8px] text-[#374151] px-1"
-                      style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}
-                    >×</button>
+                <p className="font-orbitron text-[8px] text-[#475569]">{ex.muscleGroups.map(m => MUSCLE_LABEL[m]).join(' · ')}</p>
+              </div>
+              <button onClick={() => removeExercise(exIdx)} className="font-orbitron text-[8px] text-[#ef4444] px-1.5 py-0.5 shrink-0" style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}>×</button>
+            </div>
+
+            <div className="p-3 space-y-1.5">
+              {/* Column headers */}
+              {et === 'gym' && (
+                <div className="grid grid-cols-3 gap-2 mb-1">
+                  {['Set', 'Reps', 'Weight (lbs)'].map(h => <p key={h} className="font-orbitron text-[8px] text-[#374151] uppercase tracking-wider text-center">{h}</p>)}
+                </div>
+              )}
+              {et === 'calisthenics' && (
+                <div className="grid grid-cols-2 gap-2 mb-1">
+                  {['Set', 'Reps'].map(h => <p key={h} className="font-orbitron text-[8px] text-[#374151] uppercase tracking-wider text-center">{h}</p>)}
+                </div>
+              )}
+              {et === 'cardio' && (
+                <div className="grid grid-cols-3 gap-2 mb-1">
+                  {['Set', 'Dist (km)', 'Time (m:ss)'].map(h => <p key={h} className="font-orbitron text-[8px] text-[#374151] uppercase tracking-wider text-center">{h}</p>)}
+                </div>
+              )}
+
+              {ex.sets.map((set, setIdx) => (
+                <div key={setIdx} className={`grid gap-2 items-center ${et === 'calisthenics' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  <div className="flex items-center justify-center">
+                    <span className="font-orbitron text-[10px] text-[#64748b]">{setIdx + 1}</span>
+                  </div>
+                  {et === 'gym' && (
+                    <>
+                      <input type="number" min={1} max={999} value={set.reps} onChange={e => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))} className="input-system text-center text-xs" />
+                      <div className="flex gap-1">
+                        <input type="number" min={0} max={9999} value={set.weight} onChange={e => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))} className="input-system text-center text-xs flex-1" />
+                        {ex.sets.length > 1 && <button onClick={() => removeSet(exIdx, setIdx)} className="font-orbitron text-[8px] text-[#374151] px-1" style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}>×</button>}
+                      </div>
+                    </>
+                  )}
+                  {et === 'calisthenics' && (
+                    <div className="flex gap-1">
+                      <input type="number" min={1} max={999} value={set.reps} onChange={e => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))} className="input-system text-center text-xs flex-1" />
+                      {ex.sets.length > 1 && <button onClick={() => removeSet(exIdx, setIdx)} className="font-orbitron text-[8px] text-[#374151] px-1" style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}>×</button>}
+                    </div>
+                  )}
+                  {et === 'cardio' && (
+                    <>
+                      {/* Distance in km */}
+                      <input type="number" min={0} step={0.1} value={((set.distance ?? 0) / 1000).toFixed(1)}
+                        onChange={e => updateSet(exIdx, setIdx, 'distance', Math.round(Number(e.target.value) * 1000))}
+                        className="input-system text-center text-xs" />
+                      {/* Duration as min:sec — two small inputs */}
+                      <div className="flex gap-0.5 items-center">
+                        <input type="number" min={0} max={999} value={Math.floor((set.duration ?? 0) / 60)}
+                          onChange={e => updateSet(exIdx, setIdx, 'duration', Number(e.target.value) * 60 + ((set.duration ?? 0) % 60))}
+                          className="input-system text-center text-xs flex-1" placeholder="m" />
+                        <span className="font-orbitron text-[8px] text-[#475569]">:</span>
+                        <input type="number" min={0} max={59} value={(set.duration ?? 0) % 60}
+                          onChange={e => updateSet(exIdx, setIdx, 'duration', Math.floor((set.duration ?? 0) / 60) * 60 + Number(e.target.value))}
+                          className="input-system text-center text-xs flex-1" placeholder="ss" />
+                        {ex.sets.length > 1 && <button onClick={() => removeSet(exIdx, setIdx)} className="font-orbitron text-[8px] text-[#374151] px-1 ml-0.5" style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}>×</button>}
+                      </div>
+                    </>
                   )}
                 </div>
-              </div>
-            ))}
-            <button
-              onClick={() => addSet(exIdx)}
-              className="w-full py-1 font-orbitron text-[8px] uppercase tracking-wider text-[#374151] hover:text-[#64748b] transition-colors"
-              style={{ border: '1px dashed #1e3a8a', borderRadius: '2px' }}
-            >
-              + Add Set
-            </button>
+              ))}
+              <button onClick={() => addSet(exIdx)} className="w-full py-1 font-orbitron text-[8px] uppercase tracking-wider text-[#374151] hover:text-[#64748b] transition-colors" style={{ border: '1px dashed #1e3a8a', borderRadius: '2px' }}>
+                + Add Set
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {/* Add custom exercise */}
       {!addExOpen ? (
-        <button
-          onClick={() => setAddExOpen(true)}
-          className="w-full py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all"
-          style={{ border: '1px dashed #1e3a8a', borderRadius: '2px', color: '#374151' }}
-        >
+        <button onClick={() => setAddExOpen(true)} className="w-full py-2 font-orbitron text-[9px] uppercase tracking-wider transition-all" style={{ border: '1px dashed #1e3a8a', borderRadius: '2px', color: '#374151' }}>
           + Add Exercise
         </button>
       ) : (
         <div className="p-3 space-y-3" style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}>
-          <input
-            value={newExName} onChange={e => setNewExName(e.target.value)}
-            className="input-system w-full" placeholder="Exercise name"
-          />
+          <input value={newExName} onChange={e => setNewExName(e.target.value)} className="input-system w-full" placeholder="Exercise name" />
+          <div>
+            <p className="font-orbitron text-[8px] text-[#64748b] uppercase tracking-wider mb-1">Type</p>
+            <ExTypeButtons value={newExType} onChange={setNewExType} />
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {ALL_MUSCLES.map(m => (
-              <button
-                key={m}
-                onClick={() => setNewExMuscles(prev => {
-                  const next = new Set(prev); next.has(m) ? next.delete(m) : next.add(m); return next
-                })}
+              <button key={m} onClick={() => setNewExMuscles(prev => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n })}
                 className="px-2 py-0.5 font-orbitron text-[8px] uppercase tracking-wider transition-all"
-                style={{
-                  border: `1px solid ${newExMuscles.has(m) ? '#ef4444' : '#1e3a8a'}`,
-                  borderRadius: '2px',
-                  backgroundColor: newExMuscles.has(m) ? 'rgba(239,68,68,0.2)' : 'transparent',
-                  color: newExMuscles.has(m) ? '#ef4444' : '#475569',
-                  cursor: 'pointer',
-                }}
-              >
+                style={{ border: `1px solid ${newExMuscles.has(m) ? '#ef4444' : '#1e3a8a'}`, borderRadius: '2px', backgroundColor: newExMuscles.has(m) ? 'rgba(239,68,68,0.2)' : 'transparent', color: newExMuscles.has(m) ? '#ef4444' : '#475569', cursor: 'pointer' }}>
                 {MUSCLE_LABEL[m]}
               </button>
             ))}
           </div>
           <div className="flex gap-2">
             <button onClick={() => setAddExOpen(false)} className="btn-system flex-1 py-1.5 font-orbitron text-[9px]">Cancel</button>
-            <button
-              onClick={addCustomEx}
-              disabled={!newExName.trim() || newExMuscles.size === 0}
+            <button onClick={addCustomEx} disabled={!newExName.trim() || newExMuscles.size === 0}
               className="flex-1 py-1.5 font-orbitron text-[9px] uppercase tracking-wider"
-              style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.15)', color: '#64748b', cursor: 'pointer' }}
-            >
+              style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.15)', color: '#64748b', cursor: 'pointer' }}>
               Add
             </button>
           </div>
@@ -580,6 +669,7 @@ export default function BodyPage() {
     const byExercise: Record<string, { date: string; weight: number; reps: number; est1RM: number }[]> = {}
     for (const log of workoutLogs) {
       for (const ex of log.exercises) {
+        if (ex.exerciseType === 'calisthenics' || ex.exerciseType === 'cardio') continue
         const best = ex.sets.reduce<{ weight: number; reps: number; est1RM: number }>(
           (b, s) => {
             const est = s.weight * (1 + s.reps / 30)
@@ -592,6 +682,49 @@ export default function BodyPage() {
       }
     }
     return byExercise
+  }, [workoutLogs])
+
+  const calisthenicsMaxReps = useMemo(() => {
+    const byExercise: Record<string, { date: string; maxReps: number }> = {}
+    for (const log of workoutLogs) {
+      for (const ex of log.exercises) {
+        if (ex.exerciseType !== 'calisthenics') continue
+        const maxReps = ex.sets.reduce((m, s) => Math.max(m, s.reps), 0)
+        if (!byExercise[ex.name] || maxReps > byExercise[ex.name].maxReps) {
+          byExercise[ex.name] = { date: log.date, maxReps }
+        }
+      }
+    }
+    return byExercise
+  }, [workoutLogs])
+
+  const STANDARD_DISTANCES = [
+    { label: '100m', meters: 100 }, { label: '200m', meters: 200 },
+    { label: '400m', meters: 400 }, { label: '800m', meters: 800 },
+    { label: '1K', meters: 1000 }, { label: '1.5K', meters: 1500 },
+    { label: '1 mi', meters: 1609 }, { label: '3K', meters: 3000 },
+    { label: '5K', meters: 5000 },
+  ]
+
+  const cardioPaceRecords = useMemo(() => {
+    const byExercise: Record<string, Record<string, { duration: number; date: string; meters: number }>> = {}
+    for (const log of workoutLogs) {
+      for (const ex of log.exercises) {
+        if (ex.exerciseType !== 'cardio') continue
+        for (const s of ex.sets) {
+          if (!s.distance || !s.duration || s.distance === 0 || s.duration === 0) continue
+          const std = STANDARD_DISTANCES.find(d => Math.abs(s.distance! - d.meters) / d.meters < 0.02)
+          if (!std) continue
+          if (!byExercise[ex.name]) byExercise[ex.name] = {}
+          const existing = byExercise[ex.name][std.label]
+          if (!existing || s.duration < existing.duration) {
+            byExercise[ex.name][std.label] = { duration: s.duration, date: log.date, meters: std.meters }
+          }
+        }
+      }
+    }
+    return byExercise
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workoutLogs])
 
   // All unique exercise names across all logs
@@ -867,24 +1000,34 @@ export default function BodyPage() {
                           <div className="px-3 pb-3 space-y-2 border-t border-[#1e3a8a]">
                             {log.exercises.map((ex, i) => (
                               <div key={i} className="pt-2">
-                                <p className="font-orbitron text-[9px] text-[#93c5fd] mb-1">{ex.name}</p>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <p className="font-orbitron text-[9px] text-[#93c5fd]">{ex.name}</p>
+                                  {ex.exerciseType && ex.exerciseType !== 'gym' && (
+                                    <span className="font-orbitron text-[7px] px-1 py-0.5 rounded" style={{ backgroundColor: ex.exerciseType === 'cardio' ? 'rgba(251,191,36,0.15)' : 'rgba(74,222,128,0.15)', color: ex.exerciseType === 'cardio' ? '#fbbf24' : '#4ade80' }}>{ex.exerciseType}</span>
+                                  )}
+                                </div>
                                 <p className="font-orbitron text-[8px] text-[#374151] mb-1.5">{ex.muscleGroups.join(', ')}</p>
                                 <div className="space-y-1">
                                   {ex.sets.map((s, j) => (
                                     <div key={j} className="flex items-center gap-3 px-2 py-1" style={{ background: 'rgba(30,58,138,0.06)', borderRadius: '2px' }}>
                                       <span className="font-orbitron text-[8px] text-[#374151] w-8">Set {j + 1}</span>
-                                      <span className="font-orbitron text-[9px] text-[#e2e8f0]">{s.reps} reps</span>
-                                      {s.weight > 0 && (
-                                        <span className="font-orbitron text-[9px] text-[#64748b]">@ {s.weight} lbs</span>
+                                      {ex.exerciseType === 'cardio' ? (
+                                        <>
+                                          <span className="font-orbitron text-[9px] text-[#e2e8f0]">{s.distance ? (s.distance / 1000).toFixed(1) : 0} km</span>
+                                          <span className="font-orbitron text-[9px] text-[#64748b]">{fmtDuration(s.duration ?? 0)}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="font-orbitron text-[9px] text-[#e2e8f0]">{s.reps} reps</span>
+                                          {s.weight > 0 && <span className="font-orbitron text-[9px] text-[#64748b]">@ {s.weight} lbs</span>}
+                                        </>
                                       )}
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             ))}
-                            {log.notes && (
-                              <p className="text-[10px] italic text-[#475569] pt-1">{log.notes}</p>
-                            )}
+                            {log.notes && <p className="text-[10px] italic text-[#475569] pt-1">{log.notes}</p>}
                           </div>
                         )}
                       </div>
@@ -899,12 +1042,12 @@ export default function BodyPage() {
       {/* ── RECORDS ────────────────────────────────────────────── */}
       {tab === 'records' && (
         <div className="space-y-4">
-          {/* Session max PRs */}
-          <SystemPanel title="Best PR Per Exercise" delay={0}>
+          {/* Gym PRs */}
+          <SystemPanel title="Gym — Best Estimated 1RM" delay={0}>
             <div className="divide-y divide-[#1e3a8a]">
               {Object.keys(sessionMaxPRs).length === 0 ? (
                 <div className="p-6 text-center">
-                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">Log workouts to see PRs</p>
+                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">Log gym workouts to see PRs</p>
                 </div>
               ) : (
                 Object.entries(sessionMaxPRs).map(([exName, sessions]) => {
@@ -922,6 +1065,62 @@ export default function BodyPage() {
                     </div>
                   )
                 })
+              )}
+            </div>
+          </SystemPanel>
+
+          {/* Calisthenics Max Reps */}
+          <SystemPanel title="Calisthenics — Max Reps" delay={0.05}>
+            <div className="divide-y divide-[#1e3a8a]">
+              {Object.keys(calisthenicsMaxReps).length === 0 ? (
+                <div className="p-6 text-center">
+                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">Log calisthenics workouts to see records</p>
+                </div>
+              ) : (
+                Object.entries(calisthenicsMaxReps).map(([exName, rec]) => (
+                  <div key={exName} className="p-3 flex items-center gap-3">
+                    <div className="flex-1">
+                      <p className="font-orbitron text-xs text-[#e2e8f0]">{exName}</p>
+                      <p className="font-orbitron text-[8px] text-[#64748b] mt-0.5">{rec.date}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-orbitron text-sm font-bold text-[#4ade80]">{rec.maxReps} reps</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </SystemPanel>
+
+          {/* Cardio Pace Records */}
+          <SystemPanel title="Cardio — Running Pace Records" delay={0.08}>
+            <div className="divide-y divide-[#1e3a8a]">
+              {Object.keys(cardioPaceRecords).length === 0 ? (
+                <div className="p-6 text-center">
+                  <p className="font-orbitron text-[10px] text-[#374151] uppercase tracking-wider">Log cardio workouts to see pace records</p>
+                </div>
+              ) : (
+                Object.entries(cardioPaceRecords).map(([exName, distMap]) => (
+                  <div key={exName} className="p-3 space-y-2">
+                    <p className="font-orbitron text-xs text-[#e2e8f0]">{exName}</p>
+                    <div className="space-y-1">
+                      {STANDARD_DISTANCES.filter(d => distMap[d.label]).map(d => {
+                        const rec = distMap[d.label]
+                        const paceSecPerKm = (rec.duration / rec.meters) * 1000
+                        const paceMin = Math.floor(paceSecPerKm / 60)
+                        const paceSec = Math.round(paceSecPerKm % 60)
+                        return (
+                          <div key={d.label} className="flex items-center gap-3 px-2 py-1" style={{ background: 'rgba(251,191,36,0.05)', borderRadius: '2px' }}>
+                            <span className="font-orbitron text-[9px] text-[#fbbf24] w-12">{d.label}</span>
+                            <span className="font-orbitron text-sm font-bold text-[#ef4444]">{fmtDuration(rec.duration)}</span>
+                            <span className="font-orbitron text-[8px] text-[#64748b] ml-auto">{paceMin}:{paceSec.toString().padStart(2, '0')}/km</span>
+                            <span className="font-orbitron text-[7px] text-[#374151]">{rec.date}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </SystemPanel>
