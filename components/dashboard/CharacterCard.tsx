@@ -37,7 +37,7 @@ export default function CharacterCard() {
             <div
               className="absolute -bottom-1 -right-1 w-5 h-5 flex items-center justify-center"
               style={{
-                backgroundColor: '#05070f',
+                backgroundColor: 'var(--bg-void)',
                 border: `1px solid ${tierColor}`,
                 borderRadius: '2px',
               }}

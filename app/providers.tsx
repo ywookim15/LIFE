@@ -22,7 +22,7 @@ function GameWrapper({ children }: { children: ReactNode }) {
 
   if (!mounted || authLoading || !hasHydrated) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center" style={{ backgroundColor: '#05070f' }}>
+      <div className="fixed inset-0 flex items-center justify-center" style={{ backgroundColor: 'var(--bg-void)' }}>
         <div className="text-center space-y-3">
           <div className="w-12 h-12 border-2 border-[#1e3a8a] border-t-[#3b82f6] rounded-full mx-auto animate-spin" />
           <p className="font-orbitron text-[10px] text-[#3b82f6] tracking-[0.4em] uppercase">

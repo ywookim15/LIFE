@@ -19,24 +19,30 @@
   --panel-shadow: 0 0 15px rgba(59,130,246,0.3), inset 0 0 30px rgba(59,130,246,0.05);
   --scrollbar-bg: #05070f;
   --scrollbar-thumb: #1e3a8a;
+  --card-bg: rgba(30, 58, 138, 0.08);
+  --card-bg-hover: rgba(30, 58, 138, 0.15);
+  --overlay-bg: rgba(5, 7, 15, 0.9);
 }
 
 [data-theme="light"] {
-  --bg-void: #f0f4f8;
-  --bg-panel: rgba(255, 255, 255, 0.97);
-  --bg-input: rgba(248, 250, 252, 0.97);
-  --bg-input-focus: #ffffff;
-  --border-primary: #94a3b8;
-  --border-focus: #3b82f6;
-  --text-primary: #0f172a;
-  --text-muted: #475569;
-  --text-dim: #94a3b8;
+  --bg-void: #c0ceda;
+  --bg-panel: rgba(195, 212, 226, 0.97);
+  --bg-input: rgba(210, 224, 236, 0.97);
+  --bg-input-focus: rgba(225, 236, 245, 1);
+  --border-primary: #6080a0;
+  --border-focus: #2563eb;
+  --text-primary: #0d1e33;
+  --text-muted: #2d4560;
+  --text-dim: #507090;
   --accent: #2563eb;
   --accent-light: #1d4ed8;
-  --xp-gold: #d97706;
-  --panel-shadow: 0 2px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
-  --scrollbar-bg: #f0f4f8;
-  --scrollbar-thumb: #94a3b8;
+  --xp-gold: #b45309;
+  --panel-shadow: 0 2px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.10);
+  --scrollbar-bg: #c0ceda;
+  --scrollbar-thumb: #6080a0;
+  --card-bg: rgba(150, 175, 200, 0.2);
+  --card-bg-hover: rgba(130, 160, 190, 0.3);
+  --overlay-bg: rgba(100, 130, 160, 0.7);
 }
 
 @theme {
@@ -94,6 +100,10 @@ html, body {
   border-radius: 2px;
   overflow: hidden;
 }
+[data-theme="light"] .xp-bar-track {
+  background: rgba(100,130,170,0.25);
+  border-color: rgba(37,99,235,0.4);
+}
 .xp-bar-fill {
   background: linear-gradient(90deg, #1e3a8a, #3b82f6, #93c5fd);
   height: 100%;
@@ -125,6 +135,10 @@ html, body {
   transition: all 0.15s ease;
   border-radius: 2px;
 }
+[data-theme="light"] .btn-system {
+  background: rgba(100, 130, 170, 0.2);
+  color: #1e3a6a;
+}
 .btn-system:hover {
   background: rgba(59,130,246,0.3);
   border-color: var(--accent);
@@ -136,6 +150,7 @@ html, body {
 .btn-system-danger:hover { background: rgba(239,68,68,0.2); border-color: #ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.3); color: #fca5a5; }
 .btn-system-success { border-color: #065f46; color: #4fffb0; }
 .btn-system-success:hover { background: rgba(79,255,176,0.15); border-color: #4fffb0; box-shadow: 0 0 10px rgba(79,255,176,0.3); color: #fff; }
+[data-theme="light"] .btn-system-success { color: #065f46; }
 
 .input-system {
   background: var(--bg-input);
@@ -186,10 +201,46 @@ html, body {
 }
 .select-system:focus { border-color: var(--border-focus); }
 .select-system option { background: #0a0f28; color: #e2e8f0; }
+[data-theme="light"] .select-system option { background: #d8e4f0; color: #0d1e33; }
 
-/* Light mode overrides for inline colors — target common pattern classes */
-[data-theme="light"] .text-\[\#e2e8f0\] { color: #0f172a !important; }
-[data-theme="light"] .text-\[\#64748b\] { color: #475569 !important; }
-[data-theme="light"] .text-\[\#374151\] { color: #64748b !important; }
-[data-theme="light"] .text-\[\#94a3b8\] { color: #334155 !important; }
-[data-theme="light"] .border-\[\#1e3a8a\] { border-color: #cbd5e1 !important; }
+/* ─── Light mode: global color overrides ────────────────────────────────── */
+/* Override hardcoded dark Tailwind text classes */
+[data-theme="light"] .text-\[\#e2e8f0\] { color: var(--text-primary) !important; }
+[data-theme="light"] .text-\[\#64748b\] { color: var(--text-muted) !important; }
+[data-theme="light"] .text-\[\#374151\] { color: var(--text-dim) !important; }
+[data-theme="light"] .text-\[\#94a3b8\] { color: var(--text-muted) !important; }
+[data-theme="light"] .text-\[\#475569\] { color: var(--text-muted) !important; }
+[data-theme="light"] .text-\[\#1e3a8a\] { color: #2d4a6a !important; }
+[data-theme="light"] .text-\[\#93c5fd\] { color: #1e4080 !important; }
+
+/* Override hardcoded dark border classes */
+[data-theme="light"] .border-\[\#1e3a8a\] { border-color: var(--border-primary) !important; }
+[data-theme="light"] .divide-\[\#1e3a8a\] > * + * { border-color: var(--border-primary) !important; }
+[data-theme="light"] .border-t.border-\[\#1e3a8a\] { border-color: var(--border-primary) !important; }
+
+/* Navigation sidebar and bottom bar */
+[data-theme="light"] nav.panel { background: rgba(185, 205, 225, 0.98) !important; }
+
+/* Override inline dark backgrounds via attribute – these target the most common pattern */
+[data-theme="light"] [style*="background-color: rgba(10, 15, 40"],
+[data-theme="light"] [style*="backgroundColor: rgba(10, 15, 40"] {
+  background-color: var(--card-bg) !important;
+}
+[data-theme="light"] [style*="background-color: rgba(30, 58, 138, 0.05)"],
+[data-theme="light"] [style*="backgroundColor: rgba(30, 58, 138, 0.05)"] {
+  background-color: var(--card-bg) !important;
+}
+[data-theme="light"] [style*="background-color: rgba(30, 58, 138, 0.1)"],
+[data-theme="light"] [style*="backgroundColor: rgba(30, 58, 138, 0.1)"] {
+  background-color: var(--card-bg) !important;
+}
+[data-theme="light"] [style*="background-color: rgba(30, 58, 138, 0.2)"],
+[data-theme="light"] [style*="backgroundColor: rgba(30, 58, 138, 0.2)"] {
+  background-color: var(--card-bg) !important;
+}
+
+/* Modal overlays */
+[data-theme="light"] [style*="background-color: rgba(5, 7, 15"],
+[data-theme="light"] [style*="backgroundColor: rgba(5, 7, 15"] {
+  background-color: var(--overlay-bg) !important;
+}

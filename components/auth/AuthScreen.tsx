@@ -45,7 +45,7 @@ export default function AuthScreen() {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ backgroundColor: '#05070f' }}
+      style={{ backgroundColor: 'var(--bg-void)' }}
     >
       <motion.div
         className="w-full max-w-sm px-6"

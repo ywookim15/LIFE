@@ -46,6 +46,7 @@ export interface Player {
 export interface Quest {
   id: string
   title: string
+  shortTitle?: string   // max 15 chars, shown on calendar
   description: string
   type: 'habit' | 'today' | 'weekly' | 'yearly' | 'lifePurpose'
   status: 'active' | 'completed' | 'failed'
@@ -53,6 +54,7 @@ export interface Quest {
   linkedSubStats: string[]
   createdAt: string
   dueDate?: string
+  dueTime?: string      // HH:MM
   completedAt?: string
   milestones?: Milestone[]
   xpAwarded?: number
@@ -131,7 +133,11 @@ export interface LevelUpData {
 export interface CalendarEvent {
   id: string
   title: string
-  date: string // YYYY-MM-DD
+  shortTitle?: string   // max 15 chars, shown on calendar cells
+  date: string          // YYYY-MM-DD (start date)
+  endDate?: string      // YYYY-MM-DD (for multi-day events)
+  startTime?: string    // HH:MM (optional)
+  endTime?: string      // HH:MM (optional)
   description?: string
   color?: string
 }

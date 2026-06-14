@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen" style={{ backgroundColor: '#05070f' }}>
+      <body className="min-h-screen" style={{ backgroundColor: 'var(--bg-void)' }}>
         <Providers>
           <Navigation />
           {/* Desktop: offset for sidebar. Mobile: offset for bottom bar */}

@@ -43,6 +43,8 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
   const [linkedStat, setLinkedStat] = useState<StatKey>(existingQuest?.linkedStat ?? 'INT')
   const [linkedSubStats, setLinkedSubStats] = useState<string[]>(existingQuest?.linkedSubStats ?? [])
   const [dueDate, setDueDate] = useState(existingQuest?.dueDate ?? '')
+  const [dueTime, setDueTime] = useState(existingQuest?.dueTime ?? '')
+  const [shortTitle, setShortTitle] = useState(existingQuest?.shortTitle ?? '')
   const [milestones, setMilestones] = useState<string[]>(
     existingQuest?.milestones?.map(m => m.title) ?? ['']
   )
@@ -72,11 +74,13 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
 
     const questData = {
       title: title.trim(),
+      shortTitle: shortTitle.trim() || undefined,
       description: description.trim(),
       type,
       linkedStat,
       linkedSubStats,
       dueDate: (type !== 'habit' && type !== 'lifePurpose' && dueDate) ? dueDate : undefined,
+      dueTime: (type !== 'habit' && type !== 'lifePurpose' && dueDate && dueTime) ? dueTime : undefined,
       milestones: questMilestones,
       isRecurring: type === 'habit' ? isRecurring : undefined,
     }
@@ -194,6 +198,22 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               />
             </div>
 
+            {/* Short title for calendar */}
+            <div className="space-y-1.5">
+              <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
+                Calendar Label <span className="text-[#374151] normal-case">— max 15 chars, shown on calendar</span>
+              </label>
+              <input
+                type="text"
+                value={shortTitle}
+                onChange={e => setShortTitle(e.target.value.slice(0, 15))}
+                className="input-system"
+                placeholder="Short label (optional)..."
+                maxLength={15}
+              />
+              <p className="text-[9px] text-[#374151]">{shortTitle.length}/15</p>
+            </div>
+
             {/* Description */}
             <div className="space-y-1.5">
               <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
@@ -260,18 +280,29 @@ export default function QuestForm({ onClose, defaultType = 'habit', existingQues
               </div>
             )}
 
-            {/* Due date (for today, weekly, yearly — NOT habit or lifePurpose) */}
+            {/* Due date + time (for today, weekly, yearly — NOT habit or lifePurpose) */}
             {(type === 'today' || type === 'weekly' || type === 'yearly') && (
               <div className="space-y-1.5">
                 <label className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest block">
                   Due Date (optional)
                 </label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={e => setDueDate(e.target.value)}
-                  className="input-system"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="input-system"
+                  />
+                  <input
+                    type="time"
+                    value={dueTime}
+                    onChange={e => setDueTime(e.target.value)}
+                    className="input-system"
+                    placeholder="Time (optional)"
+                    disabled={!dueDate}
+                    style={{ opacity: dueDate ? 1 : 0.4 }}
+                  />
+                </div>
               </div>
             )}
 
