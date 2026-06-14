@@ -82,7 +82,7 @@ export function checkDailyStreak(logs: DailyLog[]): number {
   for (let i = 0; i <= 365; i++) {
     const d = new Date(today)
     d.setDate(today.getDate() - i)
-    const dateStr = d.toISOString().split('T')[0]
+    const dateStr = localDateStr(d)
     const log = logs.find(l => l.date === dateStr && l.aiEvaluation)
     if (!log) break
     streak++
@@ -154,8 +154,12 @@ export function generateId(): string {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36)
 }
 
+export function localDateStr(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0]
+  return localDateStr()
 }
 
 export function formatDate(dateStr: string): string {

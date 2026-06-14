@@ -12,7 +12,7 @@ import ExerciseProgressChart from '@/components/body/ExerciseProgressChart'
 import {
   MuscleGroup, ALL_MUSCLES, WorkoutLog, PlanExercise, LoggedExercise, ManualPR,
 } from '@/lib/types'
-import { generateId, getTodayDate } from '@/lib/gameLogic'
+import { generateId, getTodayDate, localDateStr } from '@/lib/gameLogic'
 
 type Tab = 'overview' | 'plans' | 'log' | 'progress' | 'records'
 
@@ -492,7 +492,7 @@ export default function BodyPage() {
   const volumeStats = useMemo(() => {
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
-    const weekStr = weekAgo.toISOString().slice(0, 10)
+    const weekStr = localDateStr(weekAgo)
     let totalVol = 0
     let weekVol = 0
     for (const log of workoutLogs) {

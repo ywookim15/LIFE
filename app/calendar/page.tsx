@@ -5,6 +5,7 @@ import { useGameStore } from '@/lib/store'
 import { useNotification } from '@/contexts/NotificationContext'
 import SystemPanel from '@/components/ui/SystemPanel'
 import type { CalendarEvent } from '@/lib/types'
+import { localDateStr } from '@/lib/gameLogic'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = [
@@ -44,7 +45,7 @@ interface EventFormProps {
 }
 
 function EventForm({ initialDate = '', onClose, onSave }: EventFormProps) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const [title, setTitle] = useState('')
   const [shortTitle, setShortTitle] = useState('')
   const [startDate, setStartDate] = useState(initialDate || today)
@@ -238,7 +239,7 @@ export default function CalendarPage() {
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = localDateStr()
 
   const prevMonth = () => { if (month === 0) { setYear(y => y - 1); setMonth(11) } else setMonth(m => m - 1) }
   const nextMonth = () => { if (month === 11) { setYear(y => y + 1); setMonth(0) } else setMonth(m => m + 1) }
@@ -288,7 +289,7 @@ export default function CalendarPage() {
         const endD = new Date(end + 'T00:00:00')
         let dayIdx = 0
         while (cur <= endD) {
-          const ds = cur.toISOString().slice(0, 10)
+          const ds = localDateStr(cur)
           const isStart = dayIdx === 0
           const isEndDay = ds === end
           const label = isStart

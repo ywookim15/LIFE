@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { localDateStr } from '@/lib/gameLogic'
 
 interface HabitHeatmapProps {
   completionLog: { date: string; status: 'completed' | 'failed' }[]
@@ -18,7 +19,7 @@ export default function HabitHeatmap({ completionLog }: HabitHeatmapProps) {
     for (let i = WEEKS * DAYS - 1; i >= 0; i--) {
       const d = new Date(today)
       d.setDate(today.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
+      const dateStr = localDateStr(d)
       const status = logMap.get(dateStr)
       result.push({ date: dateStr, status: status ?? 'empty' })
     }
