@@ -10,6 +10,8 @@ import TierBadge from '@/components/ui/TierBadge'
 import { getDaysActive } from '@/lib/gameLogic'
 import { STAT_PALETTE } from '@/lib/defaultData'
 import type { StatConfig } from '@/lib/types'
+import { supabase } from '@/lib/supabase'
+import { FONT_OPTIONS } from '@/contexts/ThemeContext'
 
 export default function SettingsPage() {
   const player = useGameStore(s => s.player)
@@ -23,7 +25,7 @@ export default function SettingsPage() {
   const quests = useGameStore(s => s.quests)
   const { notify } = useNotification()
   const { user, signOut, deleteAccount } = useAuth()
-  const { isDark, toggleTheme } = useTheme()
+  const { isDark, toggleTheme, fontId, setFont } = useTheme()
 
   const [newName, setNewName] = useState(player?.name || '')
   const [confirmReset, setConfirmReset] = useState(false)
@@ -32,6 +34,10 @@ export default function SettingsPage() {
   const [deleteText, setDeleteText] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [signOutLoading, setSignOutLoading] = useState(false)
+  const [showPwForm, setShowPwForm] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
 
   // Skills management state
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -58,6 +64,19 @@ export default function SettingsPage() {
     notify('SYSTEM RESET. XP and history cleared.', 'error')
     setConfirmReset(false)
     setConfirmText('')
+  }
+
+  const handlePasswordReset = async () => {
+    if (!newPassword || newPassword !== confirmPassword) return
+    if (newPassword.length < 8) { notify('Password must be at least 8 characters.', 'error'); return }
+    setPwLoading(true)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPwLoading(false)
+    if (error) { notify(`Error: ${error.message}`, 'error') }
+    else {
+      notify('PASSWORD UPDATED SUCCESSFULLY.', 'success')
+      setNewPassword(''); setConfirmPassword(''); setShowPwForm(false)
+    }
   }
 
   const handleSignOut = async () => {
@@ -171,30 +190,39 @@ export default function SettingsPage() {
 
       {/* Display */}
       <SystemPanel title="Display" delay={0.03}>
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <p className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest mb-0.5">
-              Theme
-            </p>
-            <p className="text-xs text-[#e2e8f0]">{isDark ? 'Dark Mode' : 'Light Mode'}</p>
+        <div className="p-4 space-y-4">
+          {/* Theme toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest mb-0.5">Theme</p>
+              <p className="text-xs text-[#e2e8f0]">{isDark ? 'Dark Mode' : 'Light Mode'}</p>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className="relative w-12 h-6 rounded-full transition-colors duration-300"
+              style={{ background: isDark ? 'rgba(30,58,138,0.5)' : '#3b82f6', border: `1px solid ${isDark ? '#1e3a8a' : '#2563eb'}` }}
+            >
+              <span className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300"
+                style={{ left: isDark ? '2px' : '22px', background: isDark ? '#374151' : '#ffffff', boxShadow: isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.2)' }} />
+            </button>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="relative w-12 h-6 rounded-full transition-colors duration-300"
-            style={{
-              background: isDark ? 'rgba(30,58,138,0.5)' : '#3b82f6',
-              border: `1px solid ${isDark ? '#1e3a8a' : '#2563eb'}`,
-            }}
-          >
-            <span
-              className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300"
-              style={{
-                left: isDark ? '2px' : '22px',
-                background: isDark ? '#374151' : '#ffffff',
-                boxShadow: isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.2)',
-              }}
-            />
-          </button>
+
+          {/* Font selector */}
+          <div>
+            <p className="font-orbitron text-[10px] text-[#64748b] uppercase tracking-widest mb-2">UI Font</p>
+            <select
+              value={fontId}
+              onChange={e => setFont(e.target.value)}
+              className="select-system w-full"
+            >
+              {FONT_OPTIONS.map(f => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+            <p className="font-orbitron text-[8px] text-[#374151] mt-1.5">
+              Changes the body text font. Orbitron display font remains unchanged.
+            </p>
+          </div>
         </div>
       </SystemPanel>
 
@@ -372,29 +400,64 @@ export default function SettingsPage() {
       {/* Account */}
       <SystemPanel title="Account" delay={0.12}>
         <div className="p-4 space-y-3">
-          <div
-            className="p-3"
-            style={{
-              border: '1px solid var(--border-primary)',
-              borderRadius: '2px',
-              backgroundColor: 'rgba(30, 58, 138, 0.05)',
-            }}
-          >
+          <div className="p-3" style={{ border: '1px solid var(--border-primary)', borderRadius: '2px', backgroundColor: 'rgba(30, 58, 138, 0.05)' }}>
             <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest mb-1">Signed in as</p>
             <p className="font-orbitron text-xs text-[#93c5fd]">{user?.email}</p>
           </div>
+
+          {/* Password reset */}
+          {!showPwForm ? (
+            <button
+              onClick={() => setShowPwForm(true)}
+              className="w-full py-2.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
+              style={{ border: '1px solid #1e3a8a', borderRadius: '2px', background: 'transparent', color: '#93c5fd', cursor: 'pointer' }}
+            >
+              Change Password
+            </button>
+          ) : (
+            <div className="space-y-2 p-3" style={{ border: '1px solid #1e3a8a', borderRadius: '2px', background: 'rgba(30,58,138,0.08)' }}>
+              <p className="font-orbitron text-[9px] text-[#64748b] uppercase tracking-widest">Change Password</p>
+              <input
+                type="password"
+                className="input-system w-full"
+                placeholder="New password (min 8 chars)"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+              />
+              <input
+                type="password"
+                className="input-system w-full"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+              />
+              {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                <p className="font-orbitron text-[9px] text-[#ef4444]">Passwords do not match.</p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => { setShowPwForm(false); setNewPassword(''); setConfirmPassword('') }}
+                  className="btn-system flex-1 py-2 font-orbitron text-[9px]">Cancel</button>
+                <button
+                  onClick={handlePasswordReset}
+                  disabled={!newPassword || newPassword !== confirmPassword || newPassword.length < 8 || pwLoading}
+                  className="flex-1 py-2 font-orbitron text-[9px] uppercase tracking-wider"
+                  style={{
+                    border: '1px solid #3b82f6', borderRadius: '2px',
+                    background: 'rgba(59,130,246,0.2)', color: '#93c5fd', cursor: 'pointer',
+                    opacity: (!newPassword || newPassword !== confirmPassword || newPassword.length < 8) ? 0.4 : 1,
+                  }}
+                >
+                  {pwLoading ? 'Saving...' : 'Update Password'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleSignOut}
             disabled={signOutLoading}
             className="w-full py-2.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
-            style={{
-              border: '1px solid var(--border-primary)',
-              borderRadius: '2px',
-              background: 'transparent',
-              color: signOutLoading ? '#374151' : '#64748b',
-              cursor: signOutLoading ? 'not-allowed' : 'pointer',
-            }}
+            style={{ border: '1px solid var(--border-primary)', borderRadius: '2px', background: 'transparent', color: signOutLoading ? '#374151' : '#64748b', cursor: signOutLoading ? 'not-allowed' : 'pointer' }}
           >
             {signOutLoading ? 'Signing Out...' : 'Sign Out'}
           </button>

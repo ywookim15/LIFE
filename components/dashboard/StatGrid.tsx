@@ -33,7 +33,7 @@ function StatBlock({ stat, block, index, total }: { stat: StatKey; block: { valu
   return (
     <motion.div
       className={`p-3 space-y-2 ${spanClass}`}
-      style={{ background: 'rgb(10, 15, 40)' }}
+      style={{ background: 'var(--bg-void)' }}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 + index * 0.05 }}
@@ -45,8 +45,8 @@ function StatBlock({ stat, block, index, total }: { stat: StatKey; block: { valu
           <p className="text-[9px] text-[#64748b] uppercase tracking-wider">{getStatLabel(stat)}</p>
         </div>
         <p
-          className="font-orbitron text-2xl font-black"
-          style={{ color: '#93c5fd', lineHeight: 1 }}
+          className="font-orbitron text-2xl font-black text-[#93c5fd]"
+          style={{ lineHeight: 1 }}
         >
           {block.value}
         </p>

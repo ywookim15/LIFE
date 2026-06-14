@@ -21,7 +21,10 @@ export default function CharacterPage() {
   const logs = useGameStore(s => s.logs)
   const quests = useGameStore(s => s.quests)
 
-  const [tab, setTab] = useState<Tab>('summary')
+  const [tab, setTab] = useState<Tab>(() =>
+    (typeof window !== 'undefined' ? (sessionStorage.getItem('character-tab') as Tab) : null) ?? 'summary'
+  )
+  const changeTab = (t: Tab) => { sessionStorage.setItem('character-tab', t); setTab(t) }
   const [summary, setSummary] = useState<CharacterSummaryData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -99,7 +102,7 @@ export default function CharacterPage() {
         {(['summary', 'history'] as Tab[]).map(t => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => changeTab(t)}
             className="px-4 py-1.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
             style={{
               border: `1px solid ${tab === t ? '#3b82f6' : '#1e3a8a'}`,

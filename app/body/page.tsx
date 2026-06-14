@@ -23,18 +23,31 @@ const MUSCLE_LABEL: Record<MuscleGroup, string> = {
 }
 
 function getMusclesoreness(muscle: MuscleGroup, logs: WorkoutLog[]): number {
+  // Score based on sets done in the most recent session + time decay over 72h.
+  // Minimum meaningful soreness requires ≥ 3 sets; peaks at ~12+ sets.
   const now = Date.now()
-  let mostRecent = 0
+  let mostRecentTs = 0
+  let setsInSession = 0
+
   for (const log of logs) {
-    if (log.exercises.some(e => e.muscleGroups.includes(muscle))) {
-      const t = new Date(log.date).getTime()
-      if (t > mostRecent) mostRecent = t
-    }
+    const t = new Date(log.date).getTime()
+    if (t <= mostRecentTs) continue
+    const sets = log.exercises
+      .filter(e => e.muscleGroups.includes(muscle))
+      .reduce((sum, e) => sum + e.sets.length, 0)
+    if (sets === 0) continue
+    mostRecentTs = t
+    setsInSession = sets
   }
-  if (!mostRecent) return -1
-  const hoursAgo = (now - mostRecent) / 3_600_000
+
+  if (!mostRecentTs) return -1
+  const hoursAgo = (now - mostRecentTs) / 3_600_000
   if (hoursAgo >= 72) return 0
-  return Math.max(0, 1 - hoursAgo / 72)
+
+  const timeDecay = Math.max(0, 1 - hoursAgo / 72)
+  // Volume factor: 0 at <1 set, reaches 1.0 at 12 sets, soft-capped above
+  const volumeFactor = Math.min(1, Math.max(0, (setsInSession - 1) / 11))
+  return timeDecay * volumeFactor
 }
 
 // ─── Plan Creator ─────────────────────────────────────────────────────────────
@@ -71,6 +84,16 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
       sets: exSets, reps: exReps, weight: exWeight,
     }])
     setExName(''); setExMuscles(new Set()); setExSets(3); setExReps(10); setExWeight(0)
+  }
+
+  const movePlanEx = (i: number, dir: -1 | 1) => {
+    setExercises(prev => {
+      const next = [...prev]
+      const j = i + dir
+      if (j < 0 || j >= next.length) return prev
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
   }
 
   const save = () => {
@@ -112,10 +135,22 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
           {exercises.map((ex, i) => (
             <div
               key={ex.id}
-              className="flex items-center justify-between p-2"
+              className="flex items-center gap-2 p-2"
               style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}
             >
-              <div>
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button
+                  onClick={() => movePlanEx(i, -1)} disabled={i === 0}
+                  className="font-orbitron text-[8px] px-1 leading-none"
+                  style={{ color: i === 0 ? '#1e3a8a' : '#64748b', cursor: i === 0 ? 'default' : 'pointer' }}
+                >▲</button>
+                <button
+                  onClick={() => movePlanEx(i, 1)} disabled={i === exercises.length - 1}
+                  className="font-orbitron text-[8px] px-1 leading-none"
+                  style={{ color: i === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: i === exercises.length - 1 ? 'default' : 'pointer' }}
+                >▼</button>
+              </div>
+              <div className="flex-1 min-w-0">
                 <p className="text-xs text-[#e2e8f0]">{ex.name}</p>
                 <p className="font-orbitron text-[8px] text-[#64748b]">
                   {ex.sets}×{ex.reps} {ex.weight > 0 ? `@ ${ex.weight}lbs` : ''} · {ex.muscleGroups.join(', ')}
@@ -123,7 +158,7 @@ function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPla
               </div>
               <button
                 onClick={() => setExercises(prev => prev.filter((_, j) => j !== i))}
-                className="font-orbitron text-[8px] text-[#ef4444] px-2 py-1"
+                className="font-orbitron text-[8px] text-[#ef4444] px-2 py-1 shrink-0"
                 style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
               >
                 ×
@@ -282,6 +317,16 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
     setExercises(prev => prev.filter((_, i) => i !== exIdx))
   }
 
+  const moveLogEx = (i: number, dir: -1 | 1) => {
+    setExercises(prev => {
+      const next = [...prev]
+      const j = i + dir
+      if (j < 0 || j >= next.length) return prev
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+
   const save = () => {
     const withSets = exercises.filter(ex => ex.sets.length > 0)
     if (withSets.length === 0) return
@@ -332,14 +377,22 @@ function WorkoutLogger({ onDone }: { onDone: () => void }) {
       {/* Exercises */}
       {exercises.map((ex, exIdx) => (
         <div key={ex.id} style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}>
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[#1e3a8a]">
-            <div>
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1e3a8a]">
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <button onClick={() => moveLogEx(exIdx, -1)} disabled={exIdx === 0}
+                className="font-orbitron text-[8px] leading-none px-0.5"
+                style={{ color: exIdx === 0 ? '#1e3a8a' : '#64748b', cursor: exIdx === 0 ? 'default' : 'pointer' }}>▲</button>
+              <button onClick={() => moveLogEx(exIdx, 1)} disabled={exIdx === exercises.length - 1}
+                className="font-orbitron text-[8px] leading-none px-0.5"
+                style={{ color: exIdx === exercises.length - 1 ? '#1e3a8a' : '#64748b', cursor: exIdx === exercises.length - 1 ? 'default' : 'pointer' }}>▼</button>
+            </div>
+            <div className="flex-1 min-w-0">
               <p className="font-orbitron text-xs text-[#e2e8f0]">{ex.name}</p>
               <p className="font-orbitron text-[8px] text-[#475569]">{ex.muscleGroups.map(m => MUSCLE_LABEL[m]).join(' · ')}</p>
             </div>
             <button
               onClick={() => removeExercise(exIdx)}
-              className="font-orbitron text-[8px] text-[#ef4444] px-1.5 py-0.5"
+              className="font-orbitron text-[8px] text-[#ef4444] px-1.5 py-0.5 shrink-0"
               style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
             >×</button>
           </div>
@@ -485,6 +538,9 @@ export default function BodyPage() {
   const [creatingPlan, setCreatingPlan] = useState(false)
   const [loggingWorkout, setLoggingWorkout] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set())
+  const toggleLogExpand = (id: string) =>
+    setExpandedLogs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const [addingPR, setAddingPR] = useState(false)
   const [prExName, setPrExName] = useState('')
   const [prWeight, setPrWeight] = useState(0)
@@ -774,31 +830,66 @@ export default function BodyPage() {
                 {[...workoutLogs]
                   .sort((a, b) => b.date.localeCompare(a.date))
                   .slice(0, 10)
-                  .map(log => (
-                    <div key={log.id} className="p-3 flex items-start gap-3">
-                      <div className="shrink-0">
-                        <p className="font-orbitron text-[9px] text-[#64748b]">{log.date}</p>
-                        {log.planName && (
-                          <p className="font-orbitron text-[8px] text-[#1e3a8a] mt-0.5">{log.planName}</p>
+                  .map(log => {
+                    const expanded = expandedLogs.has(log.id)
+                    return (
+                      <div key={log.id}>
+                        <div
+                          className="p-3 flex items-start gap-3 cursor-pointer hover:bg-[rgba(30,58,138,0.08)] transition-colors"
+                          onClick={() => toggleLogExpand(log.id)}
+                        >
+                          <div className="shrink-0">
+                            <p className="font-orbitron text-[9px] text-[#64748b]">{log.date}</p>
+                            {log.planName && (
+                              <p className="font-orbitron text-[8px] text-[#1e3a8a] mt-0.5">{log.planName}</p>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-[#94a3b8]">
+                              {log.exercises.map(e => e.name).join(' · ')}
+                            </p>
+                            <p className="font-orbitron text-[8px] text-[#374151] mt-0.5">
+                              {log.exercises.reduce((sum, e) => sum + e.sets.length, 0)} sets · tap to {expanded ? 'collapse' : 'expand'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-orbitron text-[8px] text-[#374151]">{expanded ? '▲' : '▼'}</span>
+                            <button
+                              onClick={e => { e.stopPropagation(); deleteWorkoutLog(log.id); notify('Log deleted.', 'error') }}
+                              className="font-orbitron text-[8px] text-[#374151] px-1.5 py-0.5 hover:text-[#ef4444] transition-colors"
+                              style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div className="px-3 pb-3 space-y-2 border-t border-[#1e3a8a]">
+                            {log.exercises.map((ex, i) => (
+                              <div key={i} className="pt-2">
+                                <p className="font-orbitron text-[9px] text-[#93c5fd] mb-1">{ex.name}</p>
+                                <p className="font-orbitron text-[8px] text-[#374151] mb-1.5">{ex.muscleGroups.join(', ')}</p>
+                                <div className="space-y-1">
+                                  {ex.sets.map((s, j) => (
+                                    <div key={j} className="flex items-center gap-3 px-2 py-1" style={{ background: 'rgba(30,58,138,0.06)', borderRadius: '2px' }}>
+                                      <span className="font-orbitron text-[8px] text-[#374151] w-8">Set {j + 1}</span>
+                                      <span className="font-orbitron text-[9px] text-[#e2e8f0]">{s.reps} reps</span>
+                                      {s.weight > 0 && (
+                                        <span className="font-orbitron text-[9px] text-[#64748b]">@ {s.weight} lbs</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            {log.notes && (
+                              <p className="text-[10px] italic text-[#475569] pt-1">{log.notes}</p>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#94a3b8]">
-                          {log.exercises.map(e => e.name).join(' · ')}
-                        </p>
-                        <p className="font-orbitron text-[8px] text-[#374151] mt-0.5">
-                          {log.exercises.reduce((sum, e) => sum + e.sets.length, 0)} sets total
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => { deleteWorkoutLog(log.id); notify('Log deleted.', 'error') }}
-                        className="font-orbitron text-[8px] text-[#374151] shrink-0 px-1.5 py-0.5 hover:text-[#ef4444] transition-colors"
-                        style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
               </div>
             </SystemPanel>
           )}
@@ -825,8 +916,8 @@ export default function BodyPage() {
                         <p className="font-orbitron text-[8px] text-[#64748b] mt-0.5">{best.date}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-orbitron text-xs text-[#ef4444]">{best.weight} lbs × {best.reps}</p>
-                        <p className="font-orbitron text-[8px] text-[#64748b]">{Math.round(best.est1RM)} est. 1RM</p>
+                        <p className="font-orbitron text-sm font-bold text-[#ef4444]">{Math.round(best.est1RM)} lbs 1RM</p>
+                        <p className="font-orbitron text-[8px] text-[#64748b]">{best.weight} × {best.reps}</p>
                       </div>
                     </div>
                   )
@@ -854,8 +945,8 @@ export default function BodyPage() {
                       {pr.notes && <p className="text-[10px] text-[#475569] italic mt-0.5">{pr.notes}</p>}
                     </div>
                     <div className="text-right mr-2">
-                      <p className="font-orbitron text-xs text-[#ef4444]">{pr.weight} lbs × {pr.reps}</p>
-                      <p className="font-orbitron text-[8px] text-[#64748b]">{Math.round(pr.weight * (1 + pr.reps / 30))} est. 1RM</p>
+                      <p className="font-orbitron text-sm font-bold text-[#ef4444]">{Math.round(pr.weight * (1 + pr.reps / 30))} lbs 1RM</p>
+                      <p className="font-orbitron text-[8px] text-[#64748b]">{pr.weight} × {pr.reps}</p>
                     </div>
                     <button
                       onClick={() => { deleteManualPR(pr.id); notify('PR deleted.', 'error') }}

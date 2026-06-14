@@ -27,6 +27,22 @@ function getBest1RM(muscle: MuscleGroup, logs: WorkoutLog[]): number {
   return Math.round(best)
 }
 
+// Muscle-specific intermediate strength benchmarks (estimated 1RM in lbs).
+// These reflect natural variation in how much each muscle group can lift,
+// so calves (which naturally handle heavier loads) don't dominate the chart.
+const MUSCLE_BENCHMARKS: Record<MuscleGroup, number> = {
+  chest: 135,       // flat bench intermediate
+  back: 155,        // barbell row
+  shoulders: 95,    // overhead press
+  biceps: 60,       // barbell curl
+  triceps: 90,      // close-grip bench / pushdown
+  forearms: 40,     // wrist curl
+  abs: 50,          // weighted ab work
+  quads: 185,       // back squat
+  hamstrings: 135,  // RDL / leg curl
+  calves: 185,      // standing calf raise (naturally high — benchmark reflects that)
+}
+
 const MUSCLE_LABEL: Record<MuscleGroup, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Shoulders', biceps: 'Biceps',
   triceps: 'Triceps', forearms: 'Forearms', abs: 'Abs', quads: 'Quads',
@@ -36,9 +52,13 @@ const MUSCLE_LABEL: Record<MuscleGroup, string> = {
 interface Props { workoutLogs: WorkoutLog[] }
 
 export default function MuscleRadar({ workoutLogs }: Props) {
-  const raw = ALL_MUSCLES.map(m => ({ muscle: MUSCLE_LABEL[m], value: getBest1RM(m, workoutLogs) }))
-  const maxVal = Math.max(1, ...raw.map(r => r.value))
-  const data = raw.map(r => ({ muscle: r.muscle, score: r.value, fullMark: maxVal }))
+  const data = ALL_MUSCLES.map(m => {
+    const best1RM = getBest1RM(m, workoutLogs)
+    // Score: ratio vs benchmark × 100. 100 = hitting intermediate benchmark.
+    // No artificial cap — elite levels will read above 100.
+    const score = best1RM === 0 ? 0 : Math.round((best1RM / MUSCLE_BENCHMARKS[m]) * 100)
+    return { muscle: MUSCLE_LABEL[m], score, actual1RM: best1RM, benchmark: MUSCLE_BENCHMARKS[m] }
+  })
 
   return (
     <div className="w-full" style={{ height: 260 }}>
@@ -66,10 +86,17 @@ export default function MuscleRadar({ workoutLogs }: Props) {
               fontSize: 10,
               color: '#93c5fd',
             }}
-            formatter={(val) => [`${val ?? 0} lbs (est. 1RM)`, 'Strength']}
+            formatter={(val, _name, props) => {
+              const { actual1RM, benchmark } = props.payload ?? {}
+              if (actual1RM === 0) return ['No data', '']
+              return [`${actual1RM} lbs 1RM · ${val}% of benchmark (${benchmark} lbs)`, '']
+            }}
           />
         </RadarChart>
       </ResponsiveContainer>
+      <p className="font-orbitron text-[7px] text-center text-[#374151] mt-1">
+        Score = % of intermediate benchmark per muscle group
+      </p>
     </div>
   )
 }

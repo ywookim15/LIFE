@@ -7,10 +7,11 @@ A gamified self-improvement tracker built as a full-stack Next.js application. Y
 ## Features
 
 ### Character System
-- **5 Core Stats**: INT (Intelligence), PHY (Physical), WLT (Wealth), CHA (Charisma), CRF (Craft)
-- **Sub-skills** under each stat — fully customizable, tracked individually
-- **Tier progression**: F → E → D → C → B → A → S, each tier unlocking new thresholds
-- **XP & Leveling**: earn XP through quests and daily evaluations; level up within tiers
+- **Customizable Core Stats**: default INT / PHY / WLT / CHA / CRF — add, rename, recolor, or delete any stat in Settings
+- **Sub-skills** under each stat — fully customizable, tracked individually with progress bars
+- **Tier progression**: F → E → D → C → B → A → S → S+ → X (100 levels per tier, infinite at X)
+- **XP & Leveling**: earn XP through quests and daily evaluations; level up within tiers, tier-up at level 100
+- **Tier Progress Popup**: click your character avatar on the dashboard to open a horizontal scrollable number line showing every level, XP cost per level, and tier boundaries — color-coded per tier all the way to X
 - **Titles & Achievements**: unlock achievements and equip titles to your profile
 - **Stat History**: automatic daily snapshots, 30-day comparison chart
 - **Character Analysis**: AI-generated character assessment, weekly trajectory, and tactical directive
@@ -18,26 +19,49 @@ A gamified self-improvement tracker built as a full-stack Next.js application. Y
 ### Quest Board
 - **5 Quest Types**: Habit (daily recurring), Today (one-time daily), Weekly, Yearly, Life Purpose (sequential milestones)
 - **Automatic XP on completion**: base XP scales by quest type; habits gain a streak multiplier (up to ×1.5 at 30-day streaks)
+- **Unlock from history**: accidentally completed a quest? Unlock it from the history tab — XP is reversed automatically
 - **Habit Heatmap**: GitHub-style 12-week completion history per habit
-- **Streak tracking**: maintained automatically on daily habit reset
+- **Streak tracking**: maintained automatically on daily habit reset; prevents double-completion on reload
 - **Sequential milestones**: for Yearly and Life Purpose quests
 
-### AI Evaluation System (Google Gemini)
+### Body Tracking
+- **Workout Plans**: create named plans with exercises (sets × reps × weight), muscle group tags; edit or delete existing plans; drag ▲/▼ to reorder exercises
+- **Workout Logger**: load from a plan or log freestyle; add/remove sets per exercise inline; reorder exercises; notes field
+- **3D Muscle Map**: interactive body model with CSS 3D perspective — drag left/right to rotate 360°, or click Front/Back; muscles colored by soreness level
+- **Smart Soreness**: calculated from total sets trained per session (1 set ≠ sore; ~12 sets = max soreness), decaying over 72 hours
+- **Muscle Strength Radar**: normalized per-muscle strength benchmarks (calves benchmark ~185 lbs vs biceps ~60 lbs) so each muscle group shows meaningful relative strength
+- **Records Tab**: best estimated 1RM per exercise (large, red) with raw weight × reps below in gray; manual PR entry with date and notes
+- **Session Log**: recent sessions expandable — click any row to reveal all exercises, sets, reps, and weight for that day
+- **Volume Stats**: total volume, 7-day volume, average per session
+
+### Calendar
+- Visual month-grid calendar showing quests and custom events by color
+- Click any day to see full event details in a bottom panel
+- Multi-day event support with start/end markers
+
+### AI Evaluation System
 - Submit a daily activity log → Gemini evaluates effort → XP awarded across stats
 - Per-stat reasoning shown in the evaluation result
 - Sub-stat increases (0–5 pts) for directly worked skills
 - Cold, factual system-message style responses
 
-### Skill Radar & Charts
-- Pentagonal skill radar with per-sector color fills
-- Sub-stat spider chart per skill
+### Skill Web
+- Pentagonal skill radar for core stats
+- Sub-stat spider chart and list per skill
 - Stat history line chart (last 30 days)
 
 ### Cloud & Auth (Supabase)
 - Email/password authentication
-- All data stored in Supabase Postgres — auto-synced after every change (1.5s debounce)
+- All data stored in Supabase Postgres — auto-synced after every change (500 ms debounce + keepalive flush on page hide/unload so data survives tab close)
 - Sign out and Delete account (full data wipe) in Settings
-- New users get an onboarding flow to name their character
+
+### Display & Customization (Settings)
+- **Dark / Light mode** toggle — comprehensive light mode with readable text across all components
+- **UI Font selector**: 10 fonts (Inter, Space Grotesk, Outfit, Sora, DM Sans, Plus Jakarta Sans, Nunito, Barlow, IBM Plex Sans, Roboto Mono) — loaded from Google Fonts on demand; preference saved to localStorage
+- **Change Password**: update password in-place without an email reset link (requires being logged in)
+- **Skills Configuration**: add, rename, recolor, delete core skills inline
+- **Player Identity**: change display name
+- **Danger Zone**: reset game data or delete account
 
 ---
 
@@ -187,40 +211,48 @@ Push a commit or click **Redeploy** in Vercel. The app is now live.
 app/
 ├── layout.tsx              Root layout + metadata
 ├── providers.tsx           Auth gate, cloud sync, modals, notifications
-├── page.tsx                Dashboard
-├── quests/page.tsx         Quest board (5 types, two-column grid)
+├── page.tsx                Dashboard (CharacterCard + StatGrid + tier popup)
+├── quests/page.tsx         Quest board (5 types, two-column grid, unlock from history)
+├── body/page.tsx           Body tracking — plans, logger, 3D model, records, log
 ├── log/page.tsx            Daily log + AI evaluation + retry
+├── calendar/page.tsx       Monthly calendar with quest/event overlay
 ├── skills/page.tsx         Stat & sub-stat management
 ├── character/page.tsx      AI analysis + 30-day stat history
 ├── achievements/page.tsx   Achievement tracker
 ├── party/page.tsx          Party members
-├── settings/page.tsx       Name, sign out, delete account
+├── settings/page.tsx       Display (theme + font), password, skills config, danger zone
 └── api/
     ├── evaluate/           POST — Gemini evaluates daily log → XP
     ├── character-summary/  POST — Gemini generates character report
     └── delete-account/     DELETE — server-side account deletion
 
 lib/
-├── types.ts                All TypeScript types
-├── store.ts                Zustand store (in-memory state only)
-├── gameLogic.ts            XP math, tier logic, achievement checks
+├── types.ts                All TypeScript types (Player, Quest, WorkoutLog, CalendarEvent…)
+├── store.ts                Zustand store — quests, XP, workouts, calendar, manualPRs…
+├── gameLogic.ts            XP math, tier logic, localDateStr(), achievement checks
 ├── defaultData.ts          Initial achievements, titles, player template
 └── supabase.ts             Supabase client singleton
 
 contexts/
 ├── AuthContext.tsx         Auth state + sign in/up/out/delete
+├── ThemeContext.tsx        Dark/light mode + font preference (10 options, localStorage)
 └── NotificationContext.tsx Toast notification system
 
 hooks/
-└── useCloudSync.ts         Debounced Supabase save on any store change
+└── useCloudSync.ts         500 ms debounce Supabase save + keepalive flush on page hide
 
 components/
 ├── auth/AuthScreen.tsx     Full-screen login/signup UI
-├── quests/                 QuestCard, QuestForm, HabitHeatmap
+├── body/
+│   ├── BodyModel.tsx       3D rotating muscle map (CSS perspective + drag)
+│   ├── MuscleRadar.tsx     Radar with per-muscle strength benchmarks
+│   ├── WorkoutCalendar.tsx Monthly workout frequency heatmap
+│   └── ExerciseProgressChart.tsx  1RM trend per exercise
+├── quests/                 QuestCard (unlock/history), QuestForm, HabitHeatmap
 ├── log/                    LogEditor, EvaluationResult
-├── skills/                 SkillRadar, SubStatRadar
+├── skills/                 SkillRadar, SubStatRadar, SubStatList
 ├── charts/                 StatHistoryChart
-├── dashboard/              CharacterCard, StatGrid
+├── dashboard/              CharacterCard (tier popup via portal), StatGrid
 └── ui/                     SystemPanel, XPBar, TierBadge, LevelUpModal, etc.
 ```
 
@@ -229,9 +261,10 @@ components/
 ```
 Sign in
   └─ AuthContext → fetch player_data from Supabase
-       └─ loadGameState() → populate Zustand store
+       └─ loadGameState() → resetDueHabits() → populate Zustand store
             └─ Components read from Zustand (fast/sync)
-                 └─ Any change → useCloudSync → upsert to Supabase (1.5s debounce)
+                 └─ Any change → useCloudSync → upsert to Supabase (500 ms debounce)
+                      └─ Page hide/beforeunload → keepalive fetch (survives tab close)
 
 Sign out
   └─ AuthContext → resetGame() → AuthScreen shown
@@ -250,3 +283,26 @@ Sign out
 | Life Purpose | 500 | — |
 
 AI evaluation awards an additional 0–500 XP per daily log entry, split across stats.
+
+Unlocking a completed quest via the history tab automatically reverses the XP awarded.
+
+---
+
+## Muscle Strength Benchmarks
+
+The radar chart normalizes each muscle's best estimated 1RM against an intermediate-level benchmark so heavy-load muscles (calves, quads) don't dominate.
+
+| Muscle | Benchmark (lbs) | Reference lift |
+|---|---|---|
+| Chest | 135 | Flat bench press |
+| Back | 155 | Barbell row |
+| Shoulders | 95 | Overhead press |
+| Biceps | 60 | Barbell curl |
+| Triceps | 90 | Close-grip bench |
+| Forearms | 40 | Wrist curl |
+| Abs | 50 | Weighted ab work |
+| Quads | 185 | Back squat |
+| Hamstrings | 135 | Romanian deadlift |
+| Calves | 185 | Standing calf raise |
+
+Score = `(your best 1RM / benchmark) × 100`. 100 = hitting the intermediate standard.
