@@ -1,14 +1,15 @@
-import { Tier, StatKey, Player, Achievement, Quest, DailyLog, StatConfig } from './types'
+import { Tier, StatKey, Player, Achievement, Quest, DailyLog, StatConfig, WorkoutLog, ManualPR, PartyMember } from './types'
 import { DEFAULT_STAT_CONFIG } from './defaultData'
 
 export const TIER_ORDER: Tier[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'S+', 'X']
 
-const TIER_MULTIPLIERS: Record<Tier, number> = {
-  F: 0, E: 1, D: 2, C: 3, B: 4, A: 5, S: 6, 'S+': 8, X: 10,
+export function calcXPToNext(): number {
+  return 100
 }
 
-export function calcXPToNext(level: number, tier: Tier): number {
-  return 100 + level * 50 + TIER_MULTIPLIERS[tier] * 200
+export function getTierFromLevel(level: number): Tier {
+  const idx = Math.min(Math.floor((level - 1) / 100), TIER_ORDER.length - 1)
+  return TIER_ORDER[Math.max(0, idx)]
 }
 
 export function getNextTier(tier: Tier): Tier | null {
@@ -110,6 +111,9 @@ export function checkAchievements(
   quests: Quest[],
   logs: DailyLog[],
   achievements: Achievement[],
+  workoutLogs: WorkoutLog[] = [],
+  manualPRs: ManualPR[] = [],
+  partyMembers: PartyMember[] = [],
 ): string[] {
   const newlyUnlocked: string[] = []
   for (const ach of achievements) {
@@ -142,6 +146,56 @@ export function checkAchievements(
       case 'daily_xp': {
         const max = Math.max(0, ...logs.filter(l => l.aiEvaluation).map(l => l.aiEvaluation!.xpAwarded))
         unlocked = max >= condition.xp
+        break
+      }
+      case 'total_xp':
+        unlocked = player.totalXP >= condition.xp
+        break
+      case 'quest_type_count': {
+        const { questType, count } = condition
+        let total: number
+        if (questType === 'habit') {
+          total = quests
+            .filter(q => q.type === 'habit')
+            .reduce((sum, q) => sum + (q.completionLog?.length ?? 0) + (q.status === 'completed' ? 1 : 0), 0)
+        } else {
+          total = quests.filter(q => q.type === questType && q.status === 'completed').length
+        }
+        unlocked = total >= count
+        break
+      }
+      case 'habit_streak': {
+        const maxStreak = quests
+          .filter(q => q.type === 'habit')
+          .reduce((max, q) => Math.max(max, q.streak ?? 0), 0)
+        unlocked = maxStreak >= condition.days
+        break
+      }
+      case 'workout_count':
+        unlocked = workoutLogs.length >= condition.count
+        break
+      case 'workout_type_count': {
+        const wCount = workoutLogs.filter(log =>
+          log.exercises.some(e => e.exerciseType === condition.exerciseType)
+        ).length
+        unlocked = wCount >= condition.count
+        break
+      }
+      case 'manual_pr_count':
+        unlocked = manualPRs.length >= condition.count
+        break
+      case 'party_count':
+        unlocked = partyMembers.length >= condition.count
+        break
+      case 'log_count':
+        unlocked = logs.filter(l => l.aiEvaluation).length >= condition.count
+        break
+      case 'lp_milestone_count': {
+        const lpCount = quests
+          .filter(q => q.type === 'lifePurpose')
+          .flatMap(q => q.milestones ?? [])
+          .filter(m => m.completed).length
+        unlocked = lpCount >= condition.count
         break
       }
     }

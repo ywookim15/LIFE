@@ -33,6 +33,7 @@ export interface Player {
   id: string
   name: string
   title: string
+  customTitle?: string
   tier: Tier
   level: number
   xp: number
@@ -95,6 +96,15 @@ export type AchievementCondition =
   | { type: 'substat_count_above'; count: number; threshold: number }
   | { type: 'level_reached'; level: number }
   | { type: 'daily_xp'; xp: number }
+  | { type: 'total_xp'; xp: number }
+  | { type: 'quest_type_count'; questType: Quest['type']; count: number }
+  | { type: 'habit_streak'; days: number }
+  | { type: 'workout_count'; count: number }
+  | { type: 'workout_type_count'; exerciseType: ExerciseType; count: number }
+  | { type: 'manual_pr_count'; count: number }
+  | { type: 'party_count'; count: number }
+  | { type: 'log_count'; count: number }
+  | { type: 'lp_milestone_count'; count: number }
 
 export interface Achievement {
   id: string

@@ -9,10 +9,12 @@ A gamified self-improvement tracker built as a full-stack Next.js application. Y
 ### Character System
 - **Customizable Core Stats**: default INT / PHY / WLT / CHA / CRF — add, rename, recolor, or delete any stat in Settings
 - **Sub-skills** under each stat — fully customizable, tracked individually with progress bars
-- **Tier progression**: F → E → D → C → B → A → S → S+ → X (100 levels per tier, infinite at X)
-- **XP & Leveling**: earn XP through quests and daily evaluations; level up within tiers, tier-up at level 100
-- **Tier Progress Popup**: click your character avatar on the dashboard to open a horizontal scrollable number line showing every level, XP cost per level, and tier boundaries — color-coded per tier all the way to X
-- **Titles & Achievements**: unlock achievements and equip titles to your profile
+- **Tier progression**: F → E → D → C → B → A → S → S+ → X — levels are **continuous** (F = 1–100, E = 101–200, … X = 801+); no level reset between tiers
+- **XP & Leveling**: flat **100 XP per level**, always. Earn XP through quests and daily evaluations
+- **Tier X Prestige**: reaching level 801 triggers a prestige — level resets to 1 and XP to 0 while Tier X is locked in forever; levels then continue to infinity
+- **Tier Progress Popup**: click your character avatar on the dashboard to open a horizontal scrollable number line showing every level and tier boundary, color-coded all the way to X
+- **Achievements**: **100 achievements** across tiers, quests, habits, streaks, workouts (gym / calisthenics / cardio), sub-stats, total XP, daily logs, and party size — each with graduated thresholds
+- **Titles**: 43 unlockable titles; at Tier X you may set a fully **custom title** (any text up to 30 characters)
 - **Stat History**: automatic daily snapshots, 30-day comparison chart
 - **Character Analysis**: AI-generated character assessment, weekly trajectory, and tactical directive
 
@@ -25,13 +27,15 @@ A gamified self-improvement tracker built as a full-stack Next.js application. Y
 - **Sequential milestones**: for Yearly and Life Purpose quests
 
 ### Body Tracking
-- **Workout Plans**: create named plans with exercises (sets × reps × weight), muscle group tags; edit or delete existing plans; drag ▲/▼ to reorder exercises
-- **Workout Logger**: load from a plan or log freestyle; add/remove sets per exercise inline; reorder exercises; notes field
-- **3D Muscle Map**: interactive body model with CSS 3D perspective — drag left/right to rotate 360°, or click Front/Back; muscles colored by soreness level
-- **Smart Soreness**: calculated from total sets trained per session (1 set ≠ sore; ~12 sets = max soreness), decaying over 72 hours
-- **Muscle Strength Radar**: normalized per-muscle strength benchmarks (calves benchmark ~185 lbs vs biceps ~60 lbs) so each muscle group shows meaningful relative strength
-- **Records Tab**: best estimated 1RM per exercise (large, red) with raw weight × reps below in gray; manual PR entry with date and notes
-- **Session Log**: recent sessions expandable — click any row to reveal all exercises, sets, reps, and weight for that day
+- **Exercise Types**: every exercise is tagged as **Gym** (weight × reps), **Calisthenics** (reps only), or **Cardio** (distance in km + duration in min:sec)
+- **Workout Plans**: create named plans with type-aware exercises, muscle group tags; edit or delete existing plans; drag ▲/▼ to reorder
+- **Workout Logger**: type-aware input columns per exercise — cardio shows km + split-time inputs; calisthenics shows reps only; gym shows weight + reps
+- **3D Muscle Map**: interactive body model with CSS 3D perspective — drag to rotate 360°, or click Front/Back; muscles colored by soreness level
+- **Smart Soreness**: calculated from total sets per session, decaying over 72 hours
+- **Muscle Strength Radar**: relative-to-self normalization — your strongest muscle = 100%; shows personal muscle balance, not external benchmarks
+- **Records Tab**: three sections — Gym 1RM records, Calisthenics max-reps records, Cardio pace records per standard distance (100m → 5K)
+- **XP targeting**: gym sets → strength sub-stats; calisthenics sets → calisthenics sub-stats; cardio sets → cardiovascular/endurance sub-stats
+- **Session Log**: recent sessions expandable — click any row to reveal all exercises, sets, and type-specific metrics
 - **Volume Stats**: total volume, 7-day volume, average per session
 
 ### Calendar
@@ -57,11 +61,10 @@ A gamified self-improvement tracker built as a full-stack Next.js application. Y
 
 ### Display & Customization (Settings)
 - **Dark / Light mode** toggle — comprehensive light mode with readable text across all components
-- **UI Font selector**: 10 fonts (Inter, Space Grotesk, Outfit, Sora, DM Sans, Plus Jakarta Sans, Nunito, Barlow, IBM Plex Sans, Roboto Mono) — loaded from Google Fonts on demand; preference saved to localStorage
 - **Change Password**: update password in-place without an email reset link (requires being logged in)
 - **Skills Configuration**: add, rename, recolor, delete core skills inline
 - **Player Identity**: change display name
-- **Danger Zone**: reset game data or delete account
+- **Danger Zone**: reset game data (keeps quests, plans, calendar, skills — clears XP/history) or delete account
 
 ---
 
@@ -282,27 +285,32 @@ Sign out
 | Yearly | 300 | — |
 | Life Purpose | 500 | — |
 
-AI evaluation awards an additional 0–500 XP per daily log entry, split across stats.
+AI evaluation awards an additional 0–500 XP per daily log entry, split across stats and sub-stats.
+
+Workout XP targets specific PHY sub-stats by exercise type keyword (gym → "strength", calisthenics → "calisthenics", cardio → "cardiovascular"/"endurance").
 
 Unlocking a completed quest via the history tab automatically reverses the XP awarded.
 
 ---
 
-## Muscle Strength Benchmarks
+## Achievement Categories (100 Total)
 
-The radar chart normalizes each muscle's best estimated 1RM against an intermediate-level benchmark so heavy-load muscles (calves, quads) don't dominate.
-
-| Muscle | Benchmark (lbs) | Reference lift |
+| Category | Count | Example milestones |
 |---|---|---|
-| Chest | 135 | Flat bench press |
-| Back | 155 | Barbell row |
-| Shoulders | 95 | Overhead press |
-| Biceps | 60 | Barbell curl |
-| Triceps | 90 | Close-grip bench |
-| Forearms | 40 | Wrist curl |
-| Abs | 50 | Weighted ab work |
-| Quads | 185 | Back squat |
-| Hamstrings | 135 | Romanian deadlift |
-| Calves | 185 | Standing calf raise |
-
-Score = `(your best 1RM / benchmark) × 100`. 100 = hitting the intermediate standard.
+| Tier progression | 9 | Awakened (E) → Transcendent (S) → Unbounded (X) |
+| Specialist (sub-stat) | 6 | 10 → 25 → 50 → 100 → 500 → 1000 → 2500 |
+| Polymath (multi sub-stat) | 6 | 3 above 30 → 5 above 50 → 5 above 100 |
+| Daily streak | 7 | 7 → 14 → 30 → 60 → 90 → 180 → 365 days |
+| Quest count | 7 | 1 → 10 → 25 → 50 → 100 → 250 → 500 → 1000 |
+| Habit completions | 5 | 10 → 50 → 100 → 365 → 1000 |
+| Habit streaks | 4 | 7 → 30 → 100 → 365 days (per habit) |
+| Quest type (today/weekly/yearly/LP) | 12 | Type-specific milestones |
+| Total XP | 6 | 1K → 5K → 25K → 100K → 500K → 1M |
+| Workout volume | 7 | 1 → 10 → 25 → 50 → 100 → 250 → 500 sessions |
+| Cardio sessions | 5 | 1 → 10 → 25 → 50 → 100 |
+| Calisthenics sessions | 4 | 1 → 10 → 25 → 50 |
+| Gym sessions | 5 | 1 → 10 → 50 → 100 → 250 |
+| Manual PRs | 3 | 1 → 5 → 20 |
+| Daily XP peaks | 3 | 200 → 500 → 700 XP in one eval |
+| Evaluated log count | 5 | 1 → 10 → 50 → 100 → 365 |
+| Party | 3 | 1 → 3 → 5 members |

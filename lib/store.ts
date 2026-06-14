@@ -5,7 +5,7 @@ import {
   WorkoutPlan, WorkoutLog, StatConfig, CalendarEvent, ManualPR,
 } from './types'
 import {
-  calcXPToNext, getNextTier, generateId, getTodayDate,
+  calcXPToNext, getTierFromLevel, TIER_ORDER, generateId, getTodayDate,
   checkAchievements, getStreakMultiplier, localDateStr,
 } from './gameLogic'
 import { createInitialPlayer, DEFAULT_ACHIEVEMENTS, DEFAULT_TITLES, DEFAULT_STAT_CONFIG } from './defaultData'
@@ -21,6 +21,7 @@ interface GameStore {
   _hasHydrated: boolean
   _migrated: boolean
   _subStatV2: boolean
+  _levelV2: boolean
   statConfig: StatConfig[]
   calendarEvents: CalendarEvent[]
   manualPRs: ManualPR[]
@@ -80,7 +81,9 @@ interface GameStore {
   checkAndUnlockAchievements: () => string[]
   clearPendingLevelUp: () => void
   migrateIfNeeded: () => void
+  migrateLevels: () => void
   recalibrateSubs: () => void
+  setCustomTitle: (title: string) => void
   resetGame: () => void
   exportProfile: () => string
 }
@@ -106,6 +109,7 @@ export const useGameStore = create<GameStore>()(
     _hasHydrated: false,
     _migrated: false,
     _subStatV2: false,
+    _levelV2: false,
 
     setHasHydrated: (v) => set({ _hasHydrated: v }),
 
@@ -123,12 +127,26 @@ export const useGameStore = create<GameStore>()(
       }
 
       const subStatV2 = (d as Record<string, unknown>)._subStatV2 === true
+      const levelV2 = (d as Record<string, unknown>)._levelV2 === true
+
+      // Merge saved achievements with new defaults (preserve unlocked state, add new ones)
+      const savedAchievements = (d.achievements ?? []) as Achievement[]
+      const mergedAchievements = DEFAULT_ACHIEVEMENTS.map(def => {
+        const saved = savedAchievements.find(a => a.id === def.id)
+        return saved ?? { ...def }
+      })
+      const savedTitles = (d.titles ?? []) as Title[]
+      const mergedTitles = DEFAULT_TITLES.map(def => {
+        const saved = savedTitles.find(t => t.id === def.id)
+        return saved ?? { ...def }
+      })
+
       set({
         player,
         quests: d.quests ?? [],
         logs: d.logs ?? [],
-        achievements: d.achievements ?? DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
-        titles: d.titles ?? DEFAULT_TITLES.map(t => ({ ...t })),
+        achievements: mergedAchievements,
+        titles: mergedTitles,
         partyMembers: d.partyMembers ?? [],
         workoutPlans: d.workoutPlans ?? [],
         workoutLogs: d.workoutLogs ?? [],
@@ -137,6 +155,7 @@ export const useGameStore = create<GameStore>()(
         statConfig: d.statConfig ?? DEFAULT_STAT_CONFIG.map(c => ({ ...c })),
         _migrated: d._migrated ?? false,
         _subStatV2: subStatV2,
+        _levelV2: levelV2,
         _hasHydrated: false,
       })
       get().migrateIfNeeded()
@@ -144,6 +163,10 @@ export const useGameStore = create<GameStore>()(
       if (!subStatV2) {
         get().recalibrateSubs()
         set({ _subStatV2: true })
+      }
+      if (!levelV2) {
+        get().migrateLevels()
+        set({ _levelV2: true })
       }
       set({ _hasHydrated: true })
     },
@@ -221,17 +244,25 @@ export const useGameStore = create<GameStore>()(
       const prevLevel = player.level
       const prevTier = player.tier
 
-      while (true) {
-        const needed = calcXPToNext(newLevel, newTier)
-        if (currentXP < needed) break
-        currentXP -= needed
+      while (currentXP >= calcXPToNext()) {
+        currentXP -= calcXPToNext()
         newLevel++
         leveledUp = true
-        if (newLevel > 100) {
-          const next = getNextTier(newTier)
-          if (next) { newTier = next; tieredUp = true; newLevel = 1 }
-          // at X tier: no cap, levels continue indefinitely
+
+        if (newTier !== 'X') {
+          const derived = getTierFromLevel(newLevel)
+          if (derived !== newTier) {
+            newTier = derived
+            tieredUp = true
+            if (newTier === 'X') {
+              // Prestige: reset level to 1 upon first reaching tier X
+              newLevel = 1
+              currentXP = 0
+              break
+            }
+          }
         }
+        // At tier X: levels increment indefinitely
       }
 
       const newStats = { ...player.stats }
@@ -272,7 +303,7 @@ export const useGameStore = create<GameStore>()(
       const newPlayer: Player = {
         ...player,
         xp: currentXP,
-        xpToNext: calcXPToNext(newLevel, newTier),
+        xpToNext: calcXPToNext(),
         level: newLevel,
         tier: newTier,
         totalXP: player.totalXP + totalXP,
@@ -450,10 +481,34 @@ export const useGameStore = create<GameStore>()(
       set(s => ({ partyMembers: s.partyMembers.filter(m => m.id !== memberId) }))
     },
 
+    migrateLevels: () => {
+      const { player } = get()
+      if (!player) return
+      // Convert old per-tier level (1-100) to continuous absolute level (1-900)
+      const tierIdx = TIER_ORDER.indexOf(player.tier)
+      if (tierIdx < 0) return
+      const absoluteLevel = player.tier === 'X'
+        ? player.level  // already handled post-prestige or pre-prestige — don't re-convert
+        : tierIdx * 100 + player.level
+      set(s => ({
+        player: s.player ? { ...s.player, level: absoluteLevel, xp: 0, xpToNext: 100 } : null,
+      }))
+    },
+
+    setCustomTitle: (title: string) => {
+      set(s => {
+        if (!s.player) return {}
+        return {
+          titles: s.titles.map(t => ({ ...t, equipped: false })),
+          player: { ...s.player, customTitle: title, title },
+        }
+      })
+    },
+
     checkAndUnlockAchievements: () => {
-      const { player, quests, logs, achievements } = get()
+      const { player, quests, logs, achievements, workoutLogs, manualPRs, partyMembers } = get()
       if (!player) return []
-      const newIds = checkAchievements(player, quests, logs, achievements)
+      const newIds = checkAchievements(player, quests, logs, achievements, workoutLogs, manualPRs, partyMembers)
       if (newIds.length === 0) return []
       const now = new Date().toISOString()
       set(s => ({
@@ -716,7 +771,7 @@ export const useGameStore = create<GameStore>()(
         player: {
           ...player,
           tier: 'F', level: 1, xp: 0,
-          xpToNext: calcXPToNext(1, 'F'),
+          xpToNext: 100,
           totalXP: 0, stats: preservedStats, statHistory: [],
         },
         // Reset quest/habit completion history, keep definitions and structure

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -10,7 +11,9 @@ export default function AchievementsPage() {
   const achievements = useGameStore(s => s.achievements)
   const titles = useGameStore(s => s.titles)
   const equipTitle = useGameStore(s => s.equipTitle)
+  const setCustomTitle = useGameStore(s => s.setCustomTitle)
   const { notify } = useNotification()
+  const [customTitleDraft, setCustomTitleDraft] = useState(player?.customTitle ?? '')
 
   if (!player) return null
 
@@ -28,16 +31,27 @@ export default function AchievementsPage() {
   const conditionText = (ach: typeof achievements[0]) => {
     const { condition } = ach
     switch (condition.type) {
-      case 'quest_count': return `Complete ${condition.count} quest${condition.count > 1 ? 's' : ''}`
+      case 'quest_count': return `Complete ${condition.count.toLocaleString()} quest${condition.count > 1 ? 's' : ''}`
       case 'tier_reached': return `Reach tier ${condition.tier}`
       case 'daily_streak': return `${condition.days}-day log streak`
-      case 'substat_value': return `Any sub-stat reaches ${condition.value}`
+      case 'substat_value': return `Any sub-stat reaches ${condition.value.toLocaleString()}`
       case 'substat_count_above': return `${condition.count} sub-stats above ${condition.threshold}`
       case 'level_reached': return `Reach level ${condition.level}`
-      case 'daily_xp': return `Earn ${condition.xp} XP in one evaluation`
+      case 'daily_xp': return `Earn ${condition.xp.toLocaleString()} XP in one evaluation`
+      case 'total_xp': return `Accumulate ${condition.xp.toLocaleString()} total XP`
+      case 'quest_type_count': return `Complete ${condition.count.toLocaleString()} ${condition.questType} quest${condition.count > 1 ? 's' : ''}`
+      case 'habit_streak': return `Any habit at ${condition.days}-day streak`
+      case 'workout_count': return `Log ${condition.count.toLocaleString()} workout session${condition.count > 1 ? 's' : ''}`
+      case 'workout_type_count': return `Log ${condition.count.toLocaleString()} ${condition.exerciseType} session${condition.count > 1 ? 's' : ''}`
+      case 'manual_pr_count': return `Log ${condition.count} personal record${condition.count > 1 ? 's' : ''}`
+      case 'party_count': return `Have ${condition.count} party member${condition.count > 1 ? 's' : ''}`
+      case 'log_count': return `Submit ${condition.count.toLocaleString()} evaluated daily log${condition.count > 1 ? 's' : ''}`
+      case 'lp_milestone_count': return `Complete ${condition.count} life purpose milestone${condition.count > 1 ? 's' : ''}`
       default: return 'Unknown condition'
     }
   }
+
+  const hasUnbounded = achievements.find(a => a.id === 'unbounded')?.unlockedAt
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -226,6 +240,51 @@ export default function AchievementsPage() {
                   </div>
                 </div>
               ))
+            )}
+
+            {/* Custom Title — available at Tier X */}
+            {hasUnbounded && (
+              <div
+                className="p-2.5 mt-1"
+                style={{ border: '1px solid #ffffff33', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.04)' }}
+              >
+                <p className="font-orbitron text-[9px] font-bold text-white mb-1.5 uppercase tracking-wider">
+                  ✦ Custom Title (Tier X)
+                </p>
+                <p className="text-[9px] text-[#64748b] mb-2">You have transcended the system. Define your own legend.</p>
+                <input
+                  value={customTitleDraft}
+                  onChange={e => setCustomTitleDraft(e.target.value.slice(0, 30))}
+                  placeholder="Enter your title..."
+                  maxLength={30}
+                  className="w-full bg-transparent font-orbitron text-[10px] text-white px-2 py-1 mb-2 outline-none"
+                  style={{ border: '1px solid #ffffff44', borderRadius: '2px' }}
+                />
+                <button
+                  onClick={() => {
+                    const t = customTitleDraft.trim()
+                    if (!t) return
+                    setCustomTitle(t)
+                    notify(`CUSTOM TITLE SET: ${t}`, 'success')
+                  }}
+                  disabled={!customTitleDraft.trim()}
+                  className="w-full py-1 font-orbitron text-[9px] uppercase tracking-wider transition-all"
+                  style={{
+                    border: '1px solid #ffffff55',
+                    borderRadius: '2px',
+                    background: customTitleDraft.trim() ? 'rgba(255,255,255,0.1)' : 'transparent',
+                    color: customTitleDraft.trim() ? '#ffffff' : '#374151',
+                    cursor: customTitleDraft.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Set &amp; Equip Custom Title
+                </button>
+                {player?.customTitle && (
+                  <p className="font-orbitron text-[8px] text-[#ffffff66] mt-1 text-center">
+                    Current: &quot;{player.customTitle}&quot;
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Locked titles */}

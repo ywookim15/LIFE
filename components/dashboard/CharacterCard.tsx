@@ -7,21 +7,35 @@ import { useGameStore } from '@/lib/store'
 import TierBadge from '@/components/ui/TierBadge'
 import XPBar from '@/components/ui/XPBar'
 import SystemPanel from '@/components/ui/SystemPanel'
-import { getDaysActive, getTierColor, calcXPToNext, TIER_ORDER } from '@/lib/gameLogic'
+import { getDaysActive, getTierColor, TIER_ORDER } from '@/lib/gameLogic'
 import { Tier } from '@/lib/types'
 
-const LEVELS_PER_TIER = 100
-const X_EXTRA_LEVELS = 20
+// Absolute level at which each tier starts (levels are continuous 1–900+)
+const TIER_STARTS: Record<Tier, number> = {
+  F: 1, E: 101, D: 201, C: 301, B: 401, A: 501, S: 601, 'S+': 701, X: 801,
+}
 
 // Pre-built tier section data for the popup number line
 function buildTierSections(currentTier: Tier, currentLevel: number) {
+  // After prestige (tier X with level 1-100), the X section shows levels 1+
+  const isPostPrestige = currentTier === 'X' && currentLevel <= 100
+
   return TIER_ORDER.map(tier => {
-    const maxLvl = tier === 'X' ? currentLevel + X_EXTRA_LEVELS : LEVELS_PER_TIER
-    const levels = Array.from({ length: maxLvl }, (_, i) => ({
-      level: i + 1,
-      xpNeeded: calcXPToNext(i + 1, tier),
-      isCurrent: tier === currentTier && i + 1 === currentLevel,
-    }))
+    let startLvl: number
+    let endLvl: number
+
+    if (tier === 'X' && isPostPrestige) {
+      startLvl = 1
+      endLvl = Math.max(100, currentLevel + 20)
+    } else {
+      startLvl = TIER_STARTS[tier]
+      endLvl = tier === 'X' ? Math.max(900, currentLevel + 20) : startLvl + 99
+    }
+
+    const levels = Array.from({ length: endLvl - startLvl + 1 }, (_, i) => {
+      const lvl = startLvl + i
+      return { level: lvl, xpNeeded: 100, isCurrent: tier === currentTier && lvl === currentLevel }
+    })
     return { tier, color: getTierColor(tier), levels }
   })
 }
