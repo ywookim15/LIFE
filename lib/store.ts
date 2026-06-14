@@ -63,7 +63,9 @@ interface GameStore {
   workoutPlans: WorkoutPlan[]
   workoutLogs: WorkoutLog[]
   addWorkoutPlan: (plan: Omit<WorkoutPlan, 'id' | 'createdAt'>) => void
+  updateWorkoutPlan: (planId: string, updates: Partial<Pick<WorkoutPlan, 'name' | 'exercises'>>) => void
   deleteWorkoutPlan: (planId: string) => void
+  unlockQuest: (questId: string) => void
   logWorkout: (log: Omit<WorkoutLog, 'id'>) => void
   deleteWorkoutLog: (logId: string) => void
 
@@ -292,12 +294,20 @@ export const useGameStore = create<GameStore>()(
 
     completeQuest: (questId) => {
       const now = new Date().toISOString()
+      const today = getTodayDate()
       const quest = get().quests.find(q => q.id === questId)
       if (!quest) return
-      set(s => ({ quests: s.quests.map(q => q.id === questId ? { ...q, status: 'completed', completedAt: now } : q) }))
       const BASE_XP: Record<Quest['type'], number> = { habit: 50, today: 75, weekly: 150, yearly: 300, lifePurpose: 500 }
       const streakBonus = quest.type === 'habit' ? getStreakMultiplier(quest.streak ?? 0) : 1.0
       const totalXP = Math.round((BASE_XP[quest.type] ?? 75) * streakBonus)
+      set(s => ({ quests: s.quests.map(q => q.id === questId ? {
+        ...q,
+        status: 'completed' as const,
+        completedAt: now,
+        xpAwarded: totalXP,
+        // Set lastResetDate to today for habits so resetDueHabits won't re-activate on reload
+        ...(q.type === 'habit' ? { lastResetDate: today } : {}),
+      } : q) }))
       const allStats = (quest.linkedStats && quest.linkedStats.length > 0) ? quest.linkedStats : [quest.linkedStat]
       const xpPerStat = Math.max(1, Math.round(totalXP / allStats.length))
       const breakdown = allStats.map(stat => ({ stat, xp: xpPerStat, reasoning: `${quest.type} quest completed` }))
@@ -447,8 +457,36 @@ export const useGameStore = create<GameStore>()(
       set(s => ({ workoutPlans: [...s.workoutPlans, newPlan] }))
     },
 
+    updateWorkoutPlan: (planId, updates) => {
+      set(s => ({ workoutPlans: s.workoutPlans.map(p => p.id === planId ? { ...p, ...updates } : p) }))
+    },
+
     deleteWorkoutPlan: (planId) => {
       set(s => ({ workoutPlans: s.workoutPlans.filter(p => p.id !== planId) }))
+    },
+
+    unlockQuest: (questId) => {
+      const quest = get().quests.find(q => q.id === questId)
+      if (!quest) return
+      // Revert to active, keep lastResetDate=today for habits so resetDueHabits skips it
+      set(s => ({ quests: s.quests.map(q => q.id === questId ? {
+        ...q,
+        status: 'active' as const,
+        completedAt: undefined,
+        xpAwarded: undefined,
+      } : q) }))
+      // Reverse XP from player totals (best-effort: deduct from xp and totalXP)
+      const xp = quest.xpAwarded ?? 0
+      if (xp > 0) {
+        set(s => {
+          if (!s.player) return {}
+          return { player: {
+            ...s.player,
+            xp: Math.max(0, s.player.xp - xp),
+            totalXP: Math.max(0, s.player.totalXP - xp),
+          }}
+        })
+      }
     },
 
     logWorkout: (log) => {

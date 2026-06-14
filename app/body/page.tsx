@@ -10,7 +10,7 @@ import MuscleRadar from '@/components/body/MuscleRadar'
 import WorkoutCalendar from '@/components/body/WorkoutCalendar'
 import ExerciseProgressChart from '@/components/body/ExerciseProgressChart'
 import {
-  MuscleGroup, ALL_MUSCLES, WorkoutLog, PlanExercise, LoggedExercise, ManualPR,
+  MuscleGroup, ALL_MUSCLES, WorkoutLog, WorkoutPlan, PlanExercise, LoggedExercise, ManualPR,
 } from '@/lib/types'
 import { generateId, getTodayDate, localDateStr } from '@/lib/gameLogic'
 
@@ -48,11 +48,14 @@ interface PlanFormExercise {
   weight: number
 }
 
-function PlanCreator({ onDone }: { onDone: () => void }) {
+function PlanCreator({ onDone, existingPlan }: { onDone: () => void; existingPlan?: WorkoutPlan }) {
   const addWorkoutPlan = useGameStore(s => s.addWorkoutPlan)
+  const updateWorkoutPlan = useGameStore(s => s.updateWorkoutPlan)
   const { notify } = useNotification()
-  const [name, setName] = useState('')
-  const [exercises, setExercises] = useState<PlanFormExercise[]>([])
+  const [name, setName] = useState(existingPlan?.name ?? '')
+  const [exercises, setExercises] = useState<PlanFormExercise[]>(
+    existingPlan?.exercises.map(e => ({ ...e, weight: e.weight ?? 0 })) ?? []
+  )
   const [exName, setExName] = useState('')
   const [exMuscles, setExMuscles] = useState<Set<MuscleGroup>>(new Set())
   const [exSets, setExSets] = useState(3)
@@ -72,8 +75,13 @@ function PlanCreator({ onDone }: { onDone: () => void }) {
 
   const save = () => {
     if (!name.trim() || exercises.length === 0) return
-    addWorkoutPlan({ name: name.trim(), exercises })
-    notify('WORKOUT PLAN CREATED.', 'success')
+    if (existingPlan) {
+      updateWorkoutPlan(existingPlan.id, { name: name.trim(), exercises })
+      notify('WORKOUT PLAN UPDATED.', 'success')
+    } else {
+      addWorkoutPlan({ name: name.trim(), exercises })
+      notify('WORKOUT PLAN CREATED.', 'success')
+    }
     onDone()
   }
 
@@ -199,7 +207,7 @@ function PlanCreator({ onDone }: { onDone: () => void }) {
             backgroundColor: 'rgba(59,130,246,0.2)', color: '#93c5fd', cursor: 'pointer',
           }}
         >
-          Save Plan
+          {existingPlan ? 'Save Changes' : 'Save Plan'}
         </button>
       </div>
     </motion.div>
@@ -465,10 +473,15 @@ export default function BodyPage() {
   const addManualPR = useGameStore(s => s.addManualPR)
   const deleteManualPR = useGameStore(s => s.deleteManualPR)
   const deleteWorkoutPlan = useGameStore(s => s.deleteWorkoutPlan)
+  const updateWorkoutPlan = useGameStore(s => s.updateWorkoutPlan)
   const deleteWorkoutLog = useGameStore(s => s.deleteWorkoutLog)
   const { notify } = useNotification()
 
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>(() =>
+    (typeof window !== 'undefined' ? (sessionStorage.getItem('body-tab') as Tab) : null) ?? 'overview'
+  )
+  const changeTab = (t: Tab) => { sessionStorage.setItem('body-tab', t); setTab(t) }
+  const [editingPlan, setEditingPlan] = useState<WorkoutPlan | null>(null)
   const [creatingPlan, setCreatingPlan] = useState(false)
   const [loggingWorkout, setLoggingWorkout] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
@@ -555,7 +568,7 @@ export default function BodyPage() {
         {TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => changeTab(t.id)}
             className="px-4 py-1.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
             style={{
               border: `1px solid ${tab === t.id ? '#ef4444' : '#1e3a8a'}`,
@@ -570,7 +583,7 @@ export default function BodyPage() {
         ))}
 
         <button
-          onClick={() => { setTab('log'); setLoggingWorkout(true) }}
+          onClick={() => { changeTab('log'); setLoggingWorkout(true) }}
           className="ml-auto px-4 py-1.5 font-orbitron text-[10px] uppercase tracking-wider transition-all"
           style={{
             border: '1px solid #ef4444',
@@ -661,7 +674,9 @@ export default function BodyPage() {
         <div className="space-y-4">
           <SystemPanel title="Workout Plans" delay={0}>
             <div className="p-4 space-y-4">
-              {!creatingPlan ? (
+              {editingPlan ? (
+                <PlanCreator onDone={() => setEditingPlan(null)} existingPlan={editingPlan} />
+              ) : !creatingPlan ? (
                 <>
                   {workoutPlans.length === 0 && (
                     <p className="font-orbitron text-[10px] text-[#374151] text-center py-4 uppercase tracking-wider">
@@ -674,18 +689,24 @@ export default function BodyPage() {
                       className="p-3 space-y-2"
                       style={{ border: '1px solid #1e3a8a', borderRadius: '2px', backgroundColor: 'rgba(30,58,138,0.05)' }}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <p className="font-orbitron text-xs text-[#e2e8f0]">{plan.name}</p>
-                        <button
-                          onClick={() => {
-                            deleteWorkoutPlan(plan.id)
-                            notify('Plan deleted.', 'error')
-                          }}
-                          className="font-orbitron text-[8px] text-[#ef4444] px-2 py-0.5"
-                          style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
-                        >
-                          Delete
-                        </button>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button
+                            onClick={() => setEditingPlan(plan)}
+                            className="font-orbitron text-[8px] text-[#93c5fd] px-2 py-0.5"
+                            style={{ border: '1px solid #1e3a8a', borderRadius: '2px' }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => { deleteWorkoutPlan(plan.id); notify('Plan deleted.', 'error') }}
+                            className="font-orbitron text-[8px] text-[#ef4444] px-2 py-0.5"
+                            style={{ border: '1px solid #7f1d1d', borderRadius: '2px' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-1">
                         {plan.exercises.map(ex => (
@@ -715,6 +736,7 @@ export default function BodyPage() {
               ) : (
                 <PlanCreator onDone={() => setCreatingPlan(false)} />
               )}
+
             </div>
           </SystemPanel>
         </div>

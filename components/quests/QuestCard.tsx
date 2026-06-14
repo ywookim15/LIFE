@@ -37,6 +37,7 @@ export default function QuestCard({ quest, defaultType }: QuestCardProps) {
   const completeQuest = useGameStore(s => s.completeQuest)
   const failQuest = useGameStore(s => s.failQuest)
   const deleteQuest = useGameStore(s => s.deleteQuest)
+  const unlockQuest = useGameStore(s => s.unlockQuest)
   const updateMilestone = useGameStore(s => s.updateMilestone)
   const { notify } = useNotification()
   const [isEditing, setIsEditing] = useState(false)
@@ -318,6 +319,35 @@ export default function QuestCard({ quest, defaultType }: QuestCardProps) {
               onClick={() => deleteQuest(quest.id)}
               className="p-1"
               style={{ color: '#374151' }}
+              title="Delete quest"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* History actions — unlock or delete completed/failed quests */}
+        {quest.status !== 'active' && (
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#1e3a8a]">
+            <button
+              onClick={() => { unlockQuest(quest.id); notify('Quest unlocked — XP reversed.', 'success') }}
+              className="flex-1 font-orbitron text-[9px] px-2 py-1 uppercase tracking-wider"
+              style={{
+                background: 'rgba(30,58,138,0.3)',
+                border: '1px solid #1e3a8a',
+                color: '#93c5fd',
+                cursor: 'pointer',
+                borderRadius: '2px',
+              }}
+            >
+              Unlock
+            </button>
+            <button
+              onClick={() => deleteQuest(quest.id)}
+              className="p-1"
+              style={{ color: '#374151', cursor: 'pointer' }}
               title="Delete quest"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
