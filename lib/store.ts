@@ -20,6 +20,7 @@ interface GameStore {
   pendingLevelUp: LevelUpData | null
   _hasHydrated: boolean
   _migrated: boolean
+  _subStatV2: boolean
   statConfig: StatConfig[]
   calendarEvents: CalendarEvent[]
   manualPRs: ManualPR[]
@@ -79,6 +80,7 @@ interface GameStore {
   checkAndUnlockAchievements: () => string[]
   clearPendingLevelUp: () => void
   migrateIfNeeded: () => void
+  recalibrateSubs: () => void
   resetGame: () => void
   exportProfile: () => string
 }
@@ -103,6 +105,7 @@ export const useGameStore = create<GameStore>()(
     pendingLevelUp: null,
     _hasHydrated: false,
     _migrated: false,
+    _subStatV2: false,
 
     setHasHydrated: (v) => set({ _hasHydrated: v }),
 
@@ -119,6 +122,7 @@ export const useGameStore = create<GameStore>()(
         }
       }
 
+      const subStatV2 = (d as Record<string, unknown>)._subStatV2 === true
       set({
         player,
         quests: d.quests ?? [],
@@ -132,10 +136,15 @@ export const useGameStore = create<GameStore>()(
         manualPRs: d.manualPRs ?? [],
         statConfig: d.statConfig ?? DEFAULT_STAT_CONFIG.map(c => ({ ...c })),
         _migrated: d._migrated ?? false,
+        _subStatV2: subStatV2,
         _hasHydrated: false,
       })
       get().migrateIfNeeded()
       get().resetDueHabits()
+      if (!subStatV2) {
+        get().recalibrateSubs()
+        set({ _subStatV2: true })
+      }
       set({ _hasHydrated: true })
     },
 
@@ -494,12 +503,46 @@ export const useGameStore = create<GameStore>()(
     logWorkout: (log) => {
       const newLog: WorkoutLog = { ...log, id: generateId() }
       set(s => ({ workoutLogs: [...s.workoutLogs, newLog] }))
-      const uniqueMuscles = [...new Set(log.exercises.flatMap(e => e.muscleGroups))]
-      const totalSets = log.exercises.reduce((sum, e) => sum + e.sets.length, 0)
-      const xp = Math.min(200, Math.round(uniqueMuscles.length * 12 + totalSets * 6))
-      if (xp > 0) {
-        get().awardXP(xp, [{ stat: 'PHY', xp, reasoning: `Workout: ${uniqueMuscles.length} muscle groups, ${totalSets} sets` }])
+
+      const { player } = get()
+      let gymSets = 0, calistSets = 0, cardioSets = 0
+      for (const ex of log.exercises) {
+        const n = ex.sets.length
+        if (ex.exerciseType === 'calisthenics') calistSets += n
+        else if (ex.exerciseType === 'cardio') cardioSets += n
+        else gymSets += n
       }
+      const uniqueMuscles = [...new Set(log.exercises.flatMap(e => e.muscleGroups))]
+      const totalSets = gymSets + calistSets + cardioSets
+      const totalXP = Math.min(200, Math.round(uniqueMuscles.length * 12 + totalSets * 6))
+      if (totalXP === 0) return
+
+      // Target specific PHY sub-stats by exercise type keyword
+      const phySubs = player?.stats['PHY']?.subStats ?? []
+      const kwIds = (kws: string[]) =>
+        phySubs.filter(ss => kws.some(kw => ss.name.toLowerCase().includes(kw))).map(s => s.id)
+      const fallbackIds = phySubs.map(s => s.id)
+      const strengthIds = kwIds(['strength'])
+      const calistIds = kwIds(['calisthenics', 'calisthenic'])
+      const cardioIds = kwIds(['cardio', 'cardiovascular', 'endurance'])
+
+      const subStatUpdates: { id: string; increase: number }[] = []
+      const addIds = (ids: string[], totalPts: number) => {
+        if (ids.length === 0 || totalPts === 0) return
+        const perSub = Math.max(1, Math.floor(totalPts / ids.length))
+        for (const id of ids) subStatUpdates.push({ id, increase: perSub })
+      }
+      if (gymSets > 0) addIds(strengthIds.length ? strengthIds : fallbackIds, Math.ceil(gymSets / 2))
+      if (calistSets > 0) addIds(calistIds.length ? calistIds : fallbackIds, Math.ceil(calistSets / 2))
+      if (cardioSets > 0) addIds(cardioIds.length ? cardioIds : fallbackIds, Math.ceil(cardioSets / 2))
+
+      // Pass empty breakdown so awardXP doesn't do equal sub-stat distribution;
+      // all sub-stat increases come from the targeted subStatUpdates above.
+      get().awardXP(
+        totalXP,
+        [{ stat: 'PHY' as const, xp: 0, reasoning: `Workout: ${uniqueMuscles.length} muscle groups, ${totalSets} sets` }],
+        subStatUpdates.length > 0 ? subStatUpdates : undefined,
+      )
     },
 
     deleteWorkoutLog: (logId) => {
@@ -574,14 +617,88 @@ export const useGameStore = create<GameStore>()(
       })
     },
 
-    // Preserves stat keys, sub-stat names, workout plans — only resets progress
+    // Rebuild sub-stat values from scratch using quest completions + workout logs.
+    // Gym → strength subs, calisthenics → calisthenics subs, cardio → cardio/endurance subs.
+    recalibrateSubs: () => {
+      const { player, quests, workoutLogs } = get()
+      if (!player) return
+
+      // Zero all sub-stat values, preserving structure
+      const newStats: Record<string, StatBlock> = {}
+      for (const key of Object.keys(player.stats)) {
+        newStats[key] = {
+          value: 0,
+          subStats: player.stats[key].subStats.map(ss => ({ ...ss, value: 0 })),
+        }
+      }
+
+      // Helper: add points to a list of sub-stat IDs in newStats
+      const addById = (ids: string[], totalPoints: number) => {
+        if (ids.length === 0 || totalPoints === 0) return
+        const perSub = Math.max(1, Math.floor(totalPoints / ids.length))
+        for (const id of ids) {
+          for (const key of Object.keys(newStats)) {
+            const idx = newStats[key].subStats.findIndex(s => s.id === id)
+            if (idx >= 0) {
+              const subs = [...newStats[key].subStats]
+              subs[idx] = { ...subs[idx], value: subs[idx].value + perSub }
+              newStats[key] = { ...newStats[key], subStats: subs }
+            }
+          }
+        }
+      }
+
+      // Pre-compute PHY sub-stat ID sets for workout type targeting
+      const phySubs = newStats['PHY']?.subStats ?? []
+      const kwIds = (kws: string[]) =>
+        phySubs.filter(ss => kws.some(kw => ss.name.toLowerCase().includes(kw))).map(s => s.id)
+      const fallbackIds = phySubs.map(s => s.id)
+      const strengthIds = kwIds(['strength'])
+      const calistIds = kwIds(['calisthenics', 'calisthenic'])
+      const cardioIds = kwIds(['cardio', 'cardiovascular', 'endurance'])
+
+      // Replay quest completions (equal distribution across linked stat's sub-stats)
+      for (const q of quests) {
+        if (!q.xpAwarded) continue
+        const allStats = (q.linkedStats && q.linkedStats.length > 0) ? q.linkedStats : [q.linkedStat]
+        const xpPerStat = Math.max(1, Math.round(q.xpAwarded / allStats.length))
+        for (const stat of allStats) {
+          if (!newStats[stat]) continue
+          const ids = newStats[stat].subStats.map(s => s.id)
+          addById(ids, Math.floor(xpPerStat / 10))
+        }
+      }
+
+      // Replay workout logs with targeted sub-stat distribution
+      for (const log of workoutLogs) {
+        let gymSets = 0, calistSets = 0, cardioSets = 0
+        for (const ex of log.exercises) {
+          const n = ex.sets.length
+          if (ex.exerciseType === 'calisthenics') calistSets += n
+          else if (ex.exerciseType === 'cardio') cardioSets += n
+          else gymSets += n
+        }
+        if (gymSets > 0) addById(strengthIds.length ? strengthIds : fallbackIds, Math.ceil(gymSets / 2))
+        if (calistSets > 0) addById(calistIds.length ? calistIds : fallbackIds, Math.ceil(calistSets / 2))
+        if (cardioSets > 0) addById(cardioIds.length ? cardioIds : fallbackIds, Math.ceil(cardioSets / 2))
+      }
+
+      // Recompute stat total values
+      for (const key of Object.keys(newStats)) {
+        newStats[key] = { ...newStats[key], value: recomputeStatValue(newStats[key].subStats) }
+      }
+
+      set(s => ({ player: s.player ? { ...s.player, stats: newStats } : null }))
+    },
+
+    // Resets XP/levels/history. Keeps quests (reset to active), skills, plans, calendar.
     resetGame: () => {
-      const { player, workoutPlans, statConfig } = get()
+      const { player, quests } = get()
       if (!player) {
         set({
           achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
           titles: DEFAULT_TITLES.map(t => ({ ...t })),
-          partyMembers: [], workoutLogs: [], calendarEvents: [], pendingLevelUp: null,
+          partyMembers: [], workoutLogs: [], pendingLevelUp: null,
         })
         return
       }
@@ -602,15 +719,25 @@ export const useGameStore = create<GameStore>()(
           xpToNext: calcXPToNext(1, 'F'),
           totalXP: 0, stats: preservedStats, statHistory: [],
         },
-        quests: [],
+        // Reset quest/habit completion history, keep definitions and structure
+        quests: quests.map(q => ({
+          ...q,
+          status: 'active' as const,
+          completedAt: undefined,
+          xpAwarded: undefined,
+          streak: 0,
+          completionLog: [],
+          lastResetDate: undefined,
+          milestones: q.milestones?.map(m => ({ ...m, completed: false })),
+        })),
         logs: [],
         achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
         titles: DEFAULT_TITLES.map(t => ({ ...t })),
         partyMembers: [],
         workoutLogs: [],
-        calendarEvents: [],
         pendingLevelUp: null,
-        // Preserved: workoutPlans, statConfig, manualPRs
+        _subStatV2: true,
+        // Preserved: workoutPlans, statConfig, calendarEvents, manualPRs
       })
     },
 

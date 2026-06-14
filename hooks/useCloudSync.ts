@@ -9,13 +9,13 @@ function buildPayload(userId: string) {
   const state = useGameStore.getState()
   if (!state._hasHydrated) return null
   const {
-    player, quests, logs, achievements, titles, partyMembers, _migrated,
+    player, quests, logs, achievements, titles, partyMembers, _migrated, _subStatV2,
     workoutPlans, workoutLogs, calendarEvents, manualPRs, statConfig,
   } = state
   return {
     user_id: userId,
     data: {
-      player, quests, logs, achievements, titles, partyMembers, _migrated,
+      player, quests, logs, achievements, titles, partyMembers, _migrated, _subStatV2,
       workoutPlans, workoutLogs, calendarEvents, manualPRs, statConfig,
     },
     updated_at: new Date().toISOString(),

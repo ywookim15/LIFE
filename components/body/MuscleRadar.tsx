@@ -16,6 +16,7 @@ function getBest1RM(muscle: MuscleGroup, logs: WorkoutLog[]): number {
   let best = 0
   for (const log of logs) {
     for (const ex of log.exercises) {
+      if (ex.exerciseType === 'cardio' || ex.exerciseType === 'calisthenics') continue
       if (ex.muscleGroups.includes(muscle)) {
         for (const set of ex.sets) {
           const est = calc1RM(set.weight, set.reps)
@@ -27,22 +28,6 @@ function getBest1RM(muscle: MuscleGroup, logs: WorkoutLog[]): number {
   return Math.round(best)
 }
 
-// Muscle-specific intermediate strength benchmarks (estimated 1RM in lbs).
-// These reflect natural variation in how much each muscle group can lift,
-// so calves (which naturally handle heavier loads) don't dominate the chart.
-const MUSCLE_BENCHMARKS: Record<MuscleGroup, number> = {
-  chest: 135,       // flat bench intermediate
-  back: 155,        // barbell row
-  shoulders: 95,    // overhead press
-  biceps: 60,       // barbell curl
-  triceps: 90,      // close-grip bench / pushdown
-  forearms: 40,     // wrist curl
-  abs: 50,          // weighted ab work
-  quads: 185,       // back squat
-  hamstrings: 135,  // RDL / leg curl
-  calves: 185,      // standing calf raise (naturally high — benchmark reflects that)
-}
-
 const MUSCLE_LABEL: Record<MuscleGroup, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Shoulders', biceps: 'Biceps',
   triceps: 'Triceps', forearms: 'Forearms', abs: 'Abs', quads: 'Quads',
@@ -52,13 +37,19 @@ const MUSCLE_LABEL: Record<MuscleGroup, string> = {
 interface Props { workoutLogs: WorkoutLog[] }
 
 export default function MuscleRadar({ workoutLogs }: Props) {
-  const data = ALL_MUSCLES.map(m => {
-    const best1RM = getBest1RM(m, workoutLogs)
-    // Score: ratio vs benchmark × 100. 100 = hitting intermediate benchmark.
-    // No artificial cap — elite levels will read above 100.
-    const score = best1RM === 0 ? 0 : Math.round((best1RM / MUSCLE_BENCHMARKS[m]) * 100)
-    return { muscle: MUSCLE_LABEL[m], score, actual1RM: best1RM, benchmark: MUSCLE_BENCHMARKS[m] }
-  })
+  const raw = ALL_MUSCLES.map(m => ({
+    muscle: MUSCLE_LABEL[m],
+    actual1RM: getBest1RM(m, workoutLogs),
+  }))
+
+  // Normalize relative to the user's own strongest muscle (not an external benchmark).
+  // This lets you see your personal muscle balance — which muscles are strong vs weak
+  // relative to each other, regardless of absolute weight on the bar.
+  const maxRM = Math.max(...raw.map(d => d.actual1RM), 1)
+  const data = raw.map(d => ({
+    ...d,
+    score: d.actual1RM === 0 ? 0 : Math.round((d.actual1RM / maxRM) * 100),
+  }))
 
   return (
     <div className="w-full" style={{ height: 260 }}>
@@ -87,15 +78,15 @@ export default function MuscleRadar({ workoutLogs }: Props) {
               color: '#93c5fd',
             }}
             formatter={(val, _name, props) => {
-              const { actual1RM, benchmark } = props.payload ?? {}
+              const { actual1RM } = props.payload ?? {}
               if (actual1RM === 0) return ['No data', '']
-              return [`${actual1RM} lbs 1RM · ${val}% of benchmark (${benchmark} lbs)`, '']
+              return [`${actual1RM} lbs est. 1RM (${val}% of your best)`, '']
             }}
           />
         </RadarChart>
       </ResponsiveContainer>
       <p className="font-orbitron text-[7px] text-center text-[#374151] mt-1">
-        Score = % of intermediate benchmark per muscle group
+        Score = % of your strongest muscle — shows personal muscle balance
       </p>
     </div>
   )
