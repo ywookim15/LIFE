@@ -3,8 +3,8 @@ import { DEFAULT_STAT_CONFIG } from './defaultData'
 
 export const TIER_ORDER: Tier[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'S+', 'X']
 
-export function calcXPToNext(): number {
-  return 100
+export function calcXPToNext(level: number = 1): number {
+  return Math.floor((level - 1) / 10) * 50 + 100
 }
 
 export function getTierFromLevel(level: number): Tier {

@@ -226,7 +226,7 @@ export function createInitialPlayer(name: string, statConfig: StatConfig[] = DEF
     tier: 'F',
     level: 1,
     xp: 0,
-    xpToNext: 100,
+    xpToNext: 100, // calcXPToNext(1) = 100
     totalXP: 0,
     stats,
     createdAt: new Date().toISOString(),

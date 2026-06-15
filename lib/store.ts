@@ -244,8 +244,8 @@ export const useGameStore = create<GameStore>()(
       const prevLevel = player.level
       const prevTier = player.tier
 
-      while (currentXP >= calcXPToNext()) {
-        currentXP -= calcXPToNext()
+      while (currentXP >= calcXPToNext(newLevel)) {
+        currentXP -= calcXPToNext(newLevel)
         newLevel++
         leveledUp = true
 
@@ -308,7 +308,7 @@ export const useGameStore = create<GameStore>()(
       const newPlayer: Player = {
         ...player,
         xp: currentXP,
-        xpToNext: calcXPToNext(),
+        xpToNext: calcXPToNext(newLevel),
         level: newLevel,
         tier: newTier,
         totalXP: player.totalXP + totalXP,
@@ -503,7 +503,7 @@ export const useGameStore = create<GameStore>()(
         ? player.level  // already handled post-prestige or pre-prestige — don't re-convert
         : tierIdx * 100 + player.level
       set(s => ({
-        player: s.player ? { ...s.player, level: absoluteLevel, xp: 0, xpToNext: 100 } : null,
+        player: s.player ? { ...s.player, level: absoluteLevel, xp: 0, xpToNext: calcXPToNext(absoluteLevel) } : null,
       }))
     },
 
@@ -814,7 +814,7 @@ export const useGameStore = create<GameStore>()(
         player: {
           ...player,
           tier: 'F', level: 1, xp: 0,
-          xpToNext: 100,
+          xpToNext: calcXPToNext(1),
           totalXP: 0, stats: preservedStats, statHistory: [],
         },
         // Reset quest/habit completion history, keep definitions and structure
