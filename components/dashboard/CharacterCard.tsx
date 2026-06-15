@@ -7,7 +7,7 @@ import { useGameStore } from '@/lib/store'
 import TierBadge from '@/components/ui/TierBadge'
 import XPBar from '@/components/ui/XPBar'
 import SystemPanel from '@/components/ui/SystemPanel'
-import { getDaysActive, getTierColor, TIER_ORDER } from '@/lib/gameLogic'
+import { getDaysActive, getTierColor, TIER_ORDER, calcXPToNext } from '@/lib/gameLogic'
 import { Tier } from '@/lib/types'
 
 // Absolute level at which each tier starts (levels are continuous 1–900+)
@@ -34,7 +34,7 @@ function buildTierSections(currentTier: Tier, currentLevel: number) {
 
     const levels = Array.from({ length: endLvl - startLvl + 1 }, (_, i) => {
       const lvl = startLvl + i
-      return { level: lvl, xpNeeded: 100, isCurrent: tier === currentTier && lvl === currentLevel }
+      return { level: lvl, xpNeeded: calcXPToNext(lvl), isCurrent: tier === currentTier && lvl === currentLevel }
     })
     return { tier, color: getTierColor(tier), levels }
   })
@@ -108,7 +108,7 @@ function TierProgressPopup({ onClose }: { onClose: () => void }) {
         {/* Horizontal scrollable tier sections */}
         <div className="px-4 pb-4 flex-1 overflow-hidden">
           <p className="font-orbitron text-[7px] text-[#374151] uppercase tracking-widest mb-2">
-            Drag to scroll · F → X tier · 100 levels per tier · levels continue at X
+            Drag to scroll · F → X tier · 100 levels per tier · XP scales +50 every 10 levels
           </p>
           <div
             ref={containerRef}
