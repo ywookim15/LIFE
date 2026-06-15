@@ -39,7 +39,7 @@ interface GameStore {
 
   awardXP: (
     totalXP: number,
-    breakdown: { stat: StatKey; xp: number; reasoning: string }[],
+    breakdown: { stat: StatKey; xp: number; reasoning: string; subStatIds?: string[] }[],
     subStatUpdates?: { id: string; increase: number }[]
   ) => { leveledUp: boolean; tieredUp: boolean; newlyUnlocked: string[] }
 
@@ -266,13 +266,18 @@ export const useGameStore = create<GameStore>()(
       }
 
       const newStats = { ...player.stats }
-      for (const { stat, xp } of breakdown) {
+      for (const { stat, xp, subStatIds } of breakdown) {
         if (!newStats[stat]) continue
         const incTotal = Math.floor(xp / 10)
         const subs = newStats[stat].subStats
         if (subs.length > 0 && incTotal > 0) {
-          const incPerSub = Math.max(1, Math.floor(incTotal / subs.length))
-          const updated = subs.map(ss => ({ ...ss, value: ss.value + incPerSub }))
+          const targetSubs = subStatIds && subStatIds.length > 0
+            ? subs.filter(ss => subStatIds.includes(ss.id))
+            : subs
+          if (targetSubs.length === 0) continue
+          const incPerSub = Math.max(1, Math.floor(incTotal / targetSubs.length))
+          const targetIds = new Set(targetSubs.map(ss => ss.id))
+          const updated = subs.map(ss => targetIds.has(ss.id) ? { ...ss, value: ss.value + incPerSub } : ss)
           newStats[stat] = { subStats: updated, value: recomputeStatValue(updated) }
         }
       }
@@ -348,9 +353,16 @@ export const useGameStore = create<GameStore>()(
         // Set lastResetDate to today for habits so resetDueHabits won't re-activate on reload
         ...(q.type === 'habit' ? { lastResetDate: today } : {}),
       } : q) }))
+      const { player } = get()
       const allStats = (quest.linkedStats && quest.linkedStats.length > 0) ? quest.linkedStats : [quest.linkedStat]
       const xpPerStat = Math.max(1, Math.round(totalXP / allStats.length))
-      const breakdown = allStats.map(stat => ({ stat, xp: xpPerStat, reasoning: `${quest.type} quest completed` }))
+      const questLinkedSubStats = quest.linkedSubStats ?? []
+      const breakdown = allStats.map(stat => {
+        const subStatIds = questLinkedSubStats.length > 0
+          ? questLinkedSubStats.filter(id => player?.stats[stat]?.subStats.some(ss => ss.id === id))
+          : undefined
+        return { stat, xp: xpPerStat, reasoning: `${quest.type} quest completed`, subStatIds }
+      })
       get().awardXP(totalXP, breakdown)
       get().checkAndUnlockAchievements()
     },
@@ -541,7 +553,7 @@ export const useGameStore = create<GameStore>()(
         completedAt: undefined,
         xpAwarded: undefined,
       } : q) }))
-      // Reverse XP from player totals (best-effort: deduct from xp and totalXP)
+      // Reverse XP from player totals and stats/substats
       const xp = quest.xpAwarded ?? 0
       if (xp > 0) {
         set(s => {
@@ -552,6 +564,33 @@ export const useGameStore = create<GameStore>()(
             totalXP: Math.max(0, s.player.totalXP - xp),
           }}
         })
+
+        // Reverse stat/substat distribution using same logic as completeQuest
+        const { player } = get()
+        if (player) {
+          const allStats = (quest.linkedStats && quest.linkedStats.length > 0) ? quest.linkedStats : [quest.linkedStat]
+          const xpPerStat = Math.max(1, Math.round(xp / allStats.length))
+          const questLinkedSubStats = quest.linkedSubStats ?? []
+          const newStats = { ...player.stats }
+          for (const stat of allStats) {
+            if (!newStats[stat]) continue
+            const incTotal = Math.floor(xpPerStat / 10)
+            const subs = newStats[stat].subStats
+            if (subs.length > 0 && incTotal > 0) {
+              const targetSubs = questLinkedSubStats.length > 0
+                ? subs.filter(ss => questLinkedSubStats.includes(ss.id))
+                : subs
+              if (targetSubs.length === 0) continue
+              const incPerSub = Math.max(1, Math.floor(incTotal / targetSubs.length))
+              const targetIds = new Set(targetSubs.map(ss => ss.id))
+              const updated = subs.map(ss =>
+                targetIds.has(ss.id) ? { ...ss, value: Math.max(0, ss.value - incPerSub) } : ss
+              )
+              newStats[stat] = { subStats: updated, value: recomputeStatValue(updated) }
+            }
+          }
+          set(s => ({ player: s.player ? { ...s.player, stats: newStats } : null }))
+        }
       }
     },
 
@@ -712,15 +751,19 @@ export const useGameStore = create<GameStore>()(
       const calistIds = kwIds(['calisthenics', 'calisthenic'])
       const cardioIds = kwIds(['cardio', 'cardiovascular', 'endurance'])
 
-      // Replay quest completions (equal distribution across linked stat's sub-stats)
+      // Replay quest completions, respecting linkedSubStats when specified
       for (const q of quests) {
         if (!q.xpAwarded) continue
         const allStats = (q.linkedStats && q.linkedStats.length > 0) ? q.linkedStats : [q.linkedStat]
         const xpPerStat = Math.max(1, Math.round(q.xpAwarded / allStats.length))
+        const questLinkedSubStats = q.linkedSubStats ?? []
         for (const stat of allStats) {
           if (!newStats[stat]) continue
-          const ids = newStats[stat].subStats.map(s => s.id)
-          addById(ids, Math.floor(xpPerStat / 10))
+          const allSubIds = newStats[stat].subStats.map(s => s.id)
+          const targetIds = questLinkedSubStats.length > 0
+            ? allSubIds.filter(id => questLinkedSubStats.includes(id))
+            : allSubIds
+          addById(targetIds.length > 0 ? targetIds : allSubIds, Math.floor(xpPerStat / 10))
         }
       }
 

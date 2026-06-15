@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Quest } from '@/lib/types'
 import { getStatColor, formatDate, getTodayDate } from '@/lib/gameLogic'
@@ -43,6 +44,8 @@ export default function QuestCard({ quest, defaultType }: QuestCardProps) {
   const { notify } = useNotification()
   const [isEditing, setIsEditing] = useState(false)
   const [showHeatmap, setShowHeatmap] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => setIsMounted(true), [])
 
   const statColor = getStatColor(quest.linkedStat)
   const overdue = isOverdue(quest)
@@ -367,12 +370,13 @@ export default function QuestCard({ quest, defaultType }: QuestCardProps) {
         )}
       </motion.div>
 
-      {isEditing && (
+      {isEditing && isMounted && createPortal(
         <QuestForm
           defaultType={defaultType}
           existingQuest={quest}
           onClose={() => setIsEditing(false)}
-        />
+        />,
+        document.body
       )}
     </>
   )
