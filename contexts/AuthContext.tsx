@@ -72,8 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadUserData(session.user.id)
         setAuthLoading(false)
       } else if (event === 'SIGNED_OUT') {
-        useGameStore.getState().resetGame()
-        useGameStore.getState().setHasHydrated(true)
+        // Disable cloud sync immediately — never let a signed-out store overwrite Supabase data.
+        // Don't call resetGame(): it clears workoutLogs/XP and could race with the sync cleanup.
+        // The login screen is shown because user=null; on next sign-in loadGameState reloads data.
+        useGameStore.getState().setHasHydrated(false)
       }
     })
 

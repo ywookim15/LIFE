@@ -316,7 +316,7 @@ export default function CalendarPage() {
     }
 
     return map
-  }, [quests, calendarEvents, todayStr])
+  }, [quests, calendarEvents])
 
   const handleSaveEvent = (evData: Omit<CalendarEvent, 'id'>) => {
     addCalendarEvent(evData)
