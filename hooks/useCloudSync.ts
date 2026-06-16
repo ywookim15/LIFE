@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 function buildPayload(userId: string) {
   const state = useGameStore.getState()
   if (!state._hasHydrated) return null
+  if (!state.player) return null  // never overwrite cloud data with an uninitialised store
   const {
     player, quests, logs, achievements, titles, partyMembers, _migrated, _subStatV2, _levelV2,
     workoutPlans, workoutLogs, calendarEvents, manualPRs, statConfig,

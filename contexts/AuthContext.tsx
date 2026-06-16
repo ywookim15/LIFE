@@ -17,17 +17,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-async function loadUserData(userId: string) {
-  const { data, error } = await supabase
-    .from('player_data')
-    .select('data')
-    .eq('user_id', userId)
-    .single()
+let _loadInProgress = false
 
-  if (error || !data?.data) {
-    useGameStore.getState().setHasHydrated(true)
-  } else {
-    useGameStore.getState().loadGameState(data.data)
+async function loadUserData(userId: string) {
+  if (_loadInProgress) return
+  _loadInProgress = true
+  try {
+    const { data, error } = await supabase
+      .from('player_data')
+      .select('data')
+      .eq('user_id', userId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No row yet — new user, safe to mark hydrated with empty store
+        useGameStore.getState().setHasHydrated(true)
+      }
+      // Any other error (network, auth, etc.): leave hydrated=false so cloud sync
+      // never saves the uninitialised store and overwrites real data.
+    } else if (!data?.data) {
+      useGameStore.getState().setHasHydrated(true)
+    } else {
+      useGameStore.getState().loadGameState(data.data)
+    }
+  } finally {
+    _loadInProgress = false
   }
 }
 
