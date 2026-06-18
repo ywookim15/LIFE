@@ -68,9 +68,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null)
 
       if (event === 'SIGNED_IN' && session?.user) {
-        setAuthLoading(true)
-        await loadUserData(session.user.id)
-        setAuthLoading(false)
+        // Supabase fires SIGNED_IN on every page load (not just actual sign-ins).
+        // Only load from Supabase if the store isn't already hydrated — otherwise
+        // this overwrites the user's current session data with a stale Supabase
+        // snapshot, wiping workout logs, resetting habits, etc.
+        if (!useGameStore.getState()._hasHydrated) {
+          setAuthLoading(true)
+          await loadUserData(session.user.id)
+          setAuthLoading(false)
+        }
       } else if (event === 'SIGNED_OUT') {
         // Disable cloud sync immediately — never let a signed-out store overwrite Supabase data.
         // Don't call resetGame(): it clears workoutLogs/XP and could race with the sync cleanup.
